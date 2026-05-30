@@ -1,30 +1,6 @@
 import React from 'react';
 import { Users, Activity, AlertTriangle, Crosshair, Server, Database, Play, CheckCircle, Terminal } from 'lucide-react';
-
-// --- Mock Data Framework ---
-const macroMetrics = [
-  { label: 'Active Farmers', value: '1,240', icon: Users, color: 'text-blue-400' },
-  { label: 'Real-time Inference Sync', value: '42,890', icon: Activity, color: 'text-[#6BE675]' },
-  { label: 'Critical Outbreak Warnings', value: '3', icon: AlertTriangle, color: 'text-red-400' },
-  { label: 'Mean Engine Confidence', value: '89.4%', icon: Crosshair, color: 'text-[#F4B740]' },
-];
-
-const recentDriftLogs = [
-  { id: '1', deviceId: 'cf5387a9', region: 'Multan Belt', confidence: '64%', status: 'Harvested to Storage Bucket', time: '10:42 AM' },
-  { id: '2', deviceId: 'b82190f1', region: 'Rahim Yar Khan', confidence: '58%', status: 'Harvested to Storage Bucket', time: '10:39 AM' },
-  { id: '3', deviceId: 'a19984c2', region: 'Bahawalpur', confidence: '61%', status: 'Harvested to Storage Bucket', time: '10:25 AM' },
-  { id: '4', deviceId: 'e77215b4', region: 'Sukkur', confidence: '67%', status: 'Harvested to Storage Bucket', time: '09:58 AM' },
-];
-
-const modelRegistry = {
-  version: 'CottonModel_v2.4_quantized',
-  status: 'Active Deployment',
-  scores: {
-    f1: '0.912',
-    precision: '0.895',
-    recall: '0.924'
-  }
-};
+import { supabase } from '../../../utils/supabase';
 
 const telemetryStream = [
   '[SYS] 10:45:01 - Edge node cf5387a9 connected (Latency: 42ms)',
@@ -34,7 +10,61 @@ const telemetryStream = [
   '[SYS] 10:45:18 - Storage bucket replication complete (2.4GB)',
 ];
 
-export default function AdminDashboard() {
+export default async function AdminDashboard() {
+  // Fetch total count of registered field profiles
+  const { count: dbActiveFarmers } = await supabase
+    .from('farmers_profiles')
+    .select('*', { count: 'exact', head: true });
+
+  // Fetch overall count of incoming inference sync logs
+  const { count: dbSyncsToday } = await supabase
+    .from('diagnostic_logs')
+    .select('*', { count: 'exact', head: true });
+
+  // Fetch count of districts actively flag-marked with high risk levels
+  const { count: dbCriticalOutbreaks } = await supabase
+    .from('diagnostic_logs')
+    .select('*', { count: 'exact', head: true })
+    .eq('risk_level', 'CRITICAL');
+
+  // Fetch the list of historical model registry parameters to populate our MLOps block
+  const { data: activeDeployment } = await supabase
+    .from('model_deployments')
+    .select('*')
+    .eq('is_active_fleet_model', true)
+    .single();
+
+  // Fetch latest items out of our active data harvesting table grid
+  const { data: driftLogs } = await supabase
+    .from('harvested_images_pool')
+    .select('*')
+    .order('harvested_at', { ascending: false })
+    .limit(10);
+
+  console.log("=== COTTONACE DASHBOARD DEBUG ===");
+  console.log("Active Farmers Raw Result:", dbActiveFarmers);
+  console.log("Total Syncs Raw Result:", dbSyncsToday);
+  console.log("Critical Outbreaks Raw Result:", dbCriticalOutbreaks);
+  console.log("Active Deployment Raw Data:", activeDeployment);
+  console.log("=================================");
+
+  // Reconstruct Macro Metrics using Database Results
+  const macroMetrics = [
+    { label: 'Active Farmers', value: dbActiveFarmers?.toLocaleString() || 0, icon: Users, color: 'text-blue-400' },
+    { label: 'Real-time Inference Sync', value: dbSyncsToday?.toLocaleString() || 0, icon: Activity, color: 'text-[#6BE675]' },
+    { label: 'Critical Outbreak Warnings', value: dbCriticalOutbreaks || 0, icon: AlertTriangle, color: 'text-red-400' },
+    { label: 'Mean Engine Confidence', value: '89.4%', icon: Crosshair, color: 'text-[#F4B740]' },
+  ];
+
+  // Map Model Deployment Fallbacks
+  const modelVersion = activeDeployment?.version || 'N/A';
+  const f1Score = activeDeployment?.scores?.f1 || activeDeployment?.f1_score || "0.00";
+  const precisionScore = activeDeployment?.scores?.precision || activeDeployment?.precision || "0.00";
+  const recallScore = activeDeployment?.scores?.recall || activeDeployment?.recall || "0.00";
+
+  // Fallback for empty drift logs
+  const safeDriftLogs = driftLogs || [];
+
   return (
     <div className="min-h-screen bg-[#0B1110] text-gray-300 p-6 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -97,24 +127,34 @@ export default function AdminDashboard() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#2A3831]">
-                    {recentDriftLogs.map((log) => (
-                      <tr key={log.id} className="hover:bg-[#1a2320] transition-colors">
-                        <td className="px-5 py-4 font-mono text-xs text-gray-400">{log.deviceId}</td>
-                        <td className="px-5 py-4 text-gray-300">{log.region}</td>
-                        <td className="px-5 py-4">
-                          <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-900/30 text-red-400 border border-red-800/50">
-                            {log.confidence}
-                          </span>
+                    {safeDriftLogs.length > 0 ? (
+                      safeDriftLogs.map((log) => (
+                        <tr key={log.id || Math.random()} className="hover:bg-[#1a2320] transition-colors">
+                          <td className="px-5 py-4 font-mono text-xs text-gray-400">{log.device_id || log.deviceId || 'Unknown'}</td>
+                          <td className="px-5 py-4 text-gray-300">{log.region || 'N/A'}</td>
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-900/30 text-red-400 border border-red-800/50">
+                              {log.confidence || '0%'}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="flex items-center text-xs space-x-1.5 text-gray-400">
+                              <CheckCircle className="w-3.5 h-3.5 text-[#6BE675]" />
+                              <span>{log.status || 'Processed'}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-right text-gray-500 text-xs">
+                            {log.harvested_at ? new Date(log.harvested_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : log.time || 'N/A'}
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="px-5 py-8 text-center text-gray-500">
+                          No active drift logs found.
                         </td>
-                        <td className="px-5 py-4">
-                          <div className="flex items-center text-xs space-x-1.5 text-gray-400">
-                            <CheckCircle className="w-3.5 h-3.5 text-[#6BE675]" />
-                            <span>{log.status}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-4 text-right text-gray-500 text-xs">{log.time}</td>
                       </tr>
-                    ))}
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -153,7 +193,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Deployed Architecture</p>
                   <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg font-mono text-sm text-[#6BE675] flex items-center justify-between">
-                    <span>{modelRegistry.version}</span>
+                    <span>{modelVersion}</span>
                     <span className="flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-[#6BE675] opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-[#6BE675]"></span>
@@ -165,15 +205,15 @@ export default function AdminDashboard() {
                   <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Baseline Evaluation Scores</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{modelRegistry.scores.f1}</div>
+                      <div className="text-xl font-bold text-white">{f1Score}</div>
                       <div className="text-[10px] text-gray-500 mt-1 uppercase">F1 Score</div>
                     </div>
                     <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{modelRegistry.scores.precision}</div>
+                      <div className="text-xl font-bold text-white">{precisionScore}</div>
                       <div className="text-[10px] text-gray-500 mt-1 uppercase">Precision</div>
                     </div>
                     <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{modelRegistry.scores.recall}</div>
+                      <div className="text-xl font-bold text-white">{recallScore}</div>
                       <div className="text-[10px] text-gray-500 mt-1 uppercase">Recall</div>
                     </div>
                   </div>
