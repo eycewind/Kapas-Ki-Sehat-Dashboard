@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Activity, AlertTriangle, Crosshair, Server, Database, Play, Terminal } from 'lucide-react';
 import { supabase } from '../../../utils/supabase';
+import type { DiagnosticLog, ModelDeployment } from '../../../utils/types';
 import dynamic from 'next/dynamic';
 
 // Clean standard lazy-loading syntax targeting default export
@@ -31,51 +32,66 @@ export default function AdminDashboard() {
   const [farmersCount, setFarmersCount] = useState(0);
   const [syncsCount, setSyncsCount] = useState(0);
   const [criticalCount, setCriticalCount] = useState(0);
-  const [deployment, setDeployment] = useState<any>(null);
+  const [deployment, setDeployment] = useState<ModelDeployment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [mapLogs, setMapLogs] = useState<any[]>([]);
+  const [mapLogs, setMapLogs] = useState<DiagnosticLog[]>([]);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // 2. Central Sync Function to Load Active Telemetry
   const synchronizeDashboardData = async () => {
     try {
-      // Fetch total count of registered field profiles
-      const { count: dbActiveFarmers } = await supabase
-        .from('farmers_profiles')
-        .select('*', { count: 'exact', head: true });
+      // Run all reads in parallel; each result carries its own { data/count, error }.
+      const [farmersRes, syncsRes, criticalRes, deploymentRes, mapRes] = await Promise.all([
+        // Total count of registered field profiles
+        supabase
+          .from('farmers_profiles')
+          .select('*', { count: 'exact', head: true }),
+        // Overall count of incoming inference sync logs
+        supabase
+          .from('diagnostic_logs')
+          .select('*', { count: 'exact', head: true }),
+        // Count of logs flagged at the CRITICAL risk level
+        supabase
+          .from('diagnostic_logs')
+          .select('*', { count: 'exact', head: true })
+          .eq('risk_level', 'CRITICAL'),
+        // Active fleet model details. maybeSingle(): tolerate 0 rows instead of throwing.
+        supabase
+          .from('model_deployments')
+          .select('*')
+          .eq('is_active_fleet_model', true)
+          .maybeSingle(),
+        // Most recent inference logs for the map
+        supabase
+          .from('diagnostic_logs')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ]);
 
-      // Fetch overall count of incoming inference sync logs
-      const { count: dbSyncsToday } = await supabase
-        .from('diagnostic_logs')
-        .select('*', { count: 'exact', head: true });
+      // E-1: surface any per-query Supabase error instead of silently treating it as empty.
+      const firstError =
+        farmersRes.error ||
+        syncsRes.error ||
+        criticalRes.error ||
+        deploymentRes.error ||
+        mapRes.error;
+      if (firstError) {
+        console.error('[CRITICAL FRONTEND ERR] Supabase query error:', firstError);
+        setErrorMsg(firstError.message);
+      } else {
+        setErrorMsg(null);
+      }
 
-      // Fetch count of districts actively flag-marked with critical risk levels
-      const { count: dbCriticalOutbreaks } = await supabase
-        .from('diagnostic_logs')
-        .select('*', { count: 'exact', head: true })
-        .eq('risk_level', 'CRITICAL');
-
-      // Fetch active fleet model version details
-      const { data: activeDeployment } = await supabase
-        .from('model_deployments')
-        .select('*')
-        .eq('is_active_fleet_model', true)
-        .single();
-
-      // Fetch overall list of incoming inference sync logs from the tracking table
-      const { data: dbMapRecords } = await supabase
-        .from('diagnostic_logs') 
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      // Map the data objects cleanly to state wrappers
-      setMapLogs(dbMapRecords || []);
-      setFarmersCount(dbActiveFarmers || 0);
-      setSyncsCount(dbSyncsToday || 0);
-      setCriticalCount(dbCriticalOutbreaks || 0);
-      setDeployment(activeDeployment);
+      // Map whatever data did come back; a failed query leaves its slice at the safe default.
+      setMapLogs((mapRes.data as DiagnosticLog[]) || []);
+      setFarmersCount(farmersRes.count || 0);
+      setSyncsCount(syncsRes.count || 0);
+      setCriticalCount(criticalRes.count || 0);
+      setDeployment((deploymentRes.data as ModelDeployment) || null);
     } catch (err) {
-      console.error("[CRITICAL FRONTEND ERR] Synchronizer failure:", err);
+      console.error('[CRITICAL FRONTEND ERR] Synchronizer failure:', err);
+      setErrorMsg(err instanceof Error ? err.message : 'Unknown synchronization failure');
     } finally {
       setIsLoading(false);
     }
@@ -116,11 +132,29 @@ export default function AdminDashboard() {
     { label: 'Mean Engine Confidence', value: '89.4%', icon: Crosshair, color: 'text-[#F4B740]' },
   ];
 
-  // Map Model Metrics
-  const modelVersion = deployment?.version || 'Flee-v1.0.4-stb';
-  const f1Score = deployment?.scores?.f1 || deployment?.f1_score || "0.88";
-  const precisionScore = deployment?.scores?.precision || deployment?.precision || "0.89";
-  const recallScore = deployment?.scores?.recall || deployment?.recall || "0.87";
+  // Map Model Metrics — flat columns per MASTER-CONTRACTS.md §1.3.
+  // (`?? fallback` so a legitimate 0 score is not masked by the placeholder.)
+  const modelVersion = deployment?.model_version || 'Flee-v1.0.4-stb';
+  const f1Score = deployment?.f1_score ?? '0.88';
+  const precisionScore = deployment?.precision_score ?? '0.89';
+  const recallScore = deployment?.recall_score ?? '0.87';
+
+  // Connection status indicator: error (red) > syncing (yellow) > live (green).
+  const statusDot = errorMsg
+    ? 'bg-red-500 animate-pulse'
+    : isLoading
+    ? 'bg-yellow-400 animate-bounce'
+    : 'bg-[#6BE675] animate-pulse';
+  const statusTextColor = errorMsg
+    ? 'text-red-400'
+    : isLoading
+    ? 'text-yellow-400'
+    : 'text-[#6BE675]';
+  const statusLabel = errorMsg
+    ? 'Connection Error'
+    : isLoading
+    ? 'Syncing...'
+    : 'System Live (Realtime Mode)';
 
   return (
     <div className="min-h-screen bg-[#0B1110] text-gray-300 p-6 font-sans">
@@ -133,12 +167,18 @@ export default function AdminDashboard() {
             <p className="text-sm text-gray-400 mt-1">Admin & MLOps Dashboard Workspace</p>
           </div>
           <div className="flex items-center space-x-2 text-sm bg-[#151D1A] px-4 py-2 rounded-md border border-[#2A3831]">
-            <span className={`w-2 h-2 rounded-full ${isLoading ? 'bg-yellow-400 animate-bounce' : 'bg-[#6BE675] animate-pulse'}`}></span>
-            <span className={`${isLoading ? 'text-yellow-400' : 'text-[#6BE675]'} font-medium`}>
-              {isLoading ? 'Syncing...' : 'System Live (Realtime Mode)'}
-            </span>
+            <span className={`w-2 h-2 rounded-full ${statusDot}`}></span>
+            <span className={`${statusTextColor} font-medium`}>{statusLabel}</span>
           </div>
         </header>
+
+        {/* Error Banner — surfaces sync failures instead of silently showing zeros */}
+        {errorMsg && (
+          <div className="flex items-start space-x-2 text-sm bg-red-950/40 border border-red-800 text-red-300 rounded-md px-4 py-3">
+            <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+            <span>Failed to sync dashboard data: {errorMsg}</span>
+          </div>
+        )}
 
         {/* Top Row Metrics */}
         <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

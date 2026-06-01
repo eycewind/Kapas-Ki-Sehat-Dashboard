@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { DiagnosticLog } from '../../utils/types';
 
 interface LiveMapProps {
-  logs: any[];
+  logs: DiagnosticLog[];
 }
 
 export default function LiveMap({ logs }: LiveMapProps) {
-  const [MapWidget, setMapWidget] = useState<React.ComponentType<{ logs: any[] }> | null>(null);
+  const [MapWidget, setMapWidget] = useState<React.ComponentType<{ logs: DiagnosticLog[] }> | null>(null);
 
   useEffect(() => {
     // Dynamically import the actual map implementation only in browser

@@ -2,23 +2,43 @@ import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { DiagnosticLog, riskColor } from '../../utils/types';
 
-// Fix marker icons once at module level
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
-  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
-  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
-});
+// Build a colored circular marker keyed by canonical risk level (§4).
+// Using divIcon avoids the external unpkg PNG dependency entirely.
+const iconCache = new Map<string, L.DivIcon>();
+function riskMarker(risk: unknown): L.DivIcon {
+  const color = riskColor(risk);
+  const cached = iconCache.get(color);
+  if (cached) return cached;
+  const icon = L.divIcon({
+    className: 'cottonace-risk-marker',
+    html: `<span style="display:block;width:18px;height:18px;border-radius:9999px;background:${color};border:2px solid #0B1110;box-shadow:0 0 6px ${color};"></span>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    popupAnchor: [0, -9],
+  });
+  iconCache.set(color, icon);
+  return icon;
+}
 
 interface Props {
-  logs: any[];
+  logs: DiagnosticLog[];
 }
 
 export default function LeafletMap({ logs }: Props) {
-  const validLogs = logs.filter(
-    (log) => log?.latitude && log?.longitude && parseFloat(log.latitude) !== 0
-  );
+  // GPS is null (not 0.0) when unavailable per MASTER-CONTRACTS.md §1.1.
+  // Require both coordinates to be present and finite.
+  const validLogs = logs.filter((log) => {
+    const lat = Number(log?.latitude);
+    const lon = Number(log?.longitude);
+    return (
+      log?.latitude != null &&
+      log?.longitude != null &&
+      Number.isFinite(lat) &&
+      Number.isFinite(lon)
+    );
+  });
 
   return (
     <div className="w-full rounded-xl overflow-hidden border border-[#2A3831]" style={{ height: '400px' }}>
@@ -34,16 +54,28 @@ export default function LeafletMap({ logs }: Props) {
         />
         {validLogs.map((log) => (
           <Marker
-            key={log.id || Math.random()}
-            position={[parseFloat(log.latitude), parseFloat(log.longitude)]}
+            key={log.id}
+            position={[Number(log.latitude), Number(log.longitude)]}
+            icon={riskMarker(log.risk_level)}
           >
             <Popup>
               <div className="text-xs font-sans p-1">
                 <h4 className="font-bold text-sm border-b pb-1 mb-1 text-emerald-800">
-                  🌾 {log.agricultural_belt || 'Core Hunting Zone'}
+                  🌾 {log.district || log.agricultural_belt || 'Unknown District'}
                 </h4>
-                <p><strong>Status:</strong> {log.status || 'Processed'}</p>
-                <p><strong>Confidence:</strong> {log.confidence_score ? `${Math.round(log.confidence_score * 100)}%` : 'N/A'}</p>
+                <p>
+                  <strong>Risk:</strong>{' '}
+                  <span style={{ color: riskColor(log.risk_level) }}>
+                    {log.risk_level || 'N/A'}
+                  </span>
+                </p>
+                <p><strong>Whitefly count:</strong> {log.whitefly_count ?? 'N/A'}</p>
+                <p>
+                  <strong>Confidence:</strong>{' '}
+                  {log.confidence_score != null
+                    ? `${Math.round(log.confidence_score * 100)}%`
+                    : 'N/A'}
+                </p>
               </div>
             </Popup>
           </Marker>
