@@ -5,7 +5,7 @@ dashboard. This file is the dashboard team's working source of truth and is kept
 **aligned to `MASTER-CONTRACTS.md`** (the cross-repo authority). Where the two
 ever disagree, MASTER-CONTRACTS.md wins and this file gets corrected.
 
-- **Last reconciled with MASTER-CONTRACTS.md:** 2026-06-01
+- **Last reconciled with MASTER-CONTRACTS.md:** 2026-06-02 (v2)
 - **Scope:** the `KapasKiSehat_Dashboard` repo only. The dashboard is read-only
   against Supabase and (currently) calls no backend HTTP endpoints.
 
@@ -21,7 +21,9 @@ Supabase (Postgres) ──direct reads + Realtime──> THIS dashboard
 ```
 
 The dashboard performs counts + a recent-rows list, subscribes to realtime
-changes on `diagnostic_logs`, and renders a map + MLOps panel. No write path.
+changes on four tables (`diagnostic_logs`, `farmers_profiles`,
+`model_deployments`, `system_health_telemetry`), and renders a map, telemetry
+console, and MLOps panel. No write path.
 
 ---
 
@@ -56,9 +58,9 @@ MASTER §1; this lists only what the dashboard touches.
 ### `diagnostic_logs` (MASTER §1.1)
 | Query | Purpose |
 |---|---|
-| `count exact, head` | **Real-time Inference Sync** (total rows) |
+| `count exact, head`, `.gte('created_at', now-24h)` | **Inference Scans** (rolling 24-hour window) |
 | `count exact, head`, `.eq('risk_level','CRITICAL')` | **Critical Outbreak Warnings** |
-| `select('*').order('created_at', desc).limit(50)` | rows → map |
+| `select('*').order('created_at', desc).limit(50)` | rows → map + mean confidence |
 | Realtime `postgres_changes` `*` | re-runs full sync on any change |
 
 **Columns referenced** (typed as `DiagnosticLog` in `utils/types.ts`):
@@ -85,14 +87,14 @@ re-fetch (does not re-run the full dashboard sync).
 
 | Column | Used at | Notes |
 |---|---|---|
-| `id` | LeafletMap | bigint, React key |
+| `id` | telemetry console | bigint, React key |
 | `log_level` | telemetry console | `INFO\|WARN\|ERROR`; drives color via `logLevelColor()` |
 | `component` | telemetry console | subsystem name |
 | `message` | telemetry console | log body |
 | `created_at` | telemetry console | formatted HH:MM:SS via `formatLogTime()` |
 
 ### `model_deployments` (MASTER §1.3)
-`select('*').eq('is_active_fleet_model', true).single()` → MLOps card.
+`select('*').eq('is_active_fleet_model', true).maybeSingle()` → MLOps card.
 Typed as `ModelDeployment`.
 
 | Column | Display | Fallback |
@@ -131,12 +133,12 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 | Definition | Location | Shape |
 |---|---|---|
-| `RiskLevel`, `RISK_LEVELS`, `RISK_COLORS`, `riskColor()`, `isRiskLevel()` | `utils/types.ts` | risk enum + helpers |
+| `RiskLevel`, `RISK_LEVELS`, `RISK_COLORS`, `riskColor()`, `isRiskLevel()` | `utils/types.ts` | risk enum + helpers (MASTER §4) |
 | `DiagnosticLog` | `utils/types.ts` | full `diagnostic_logs` row (MASTER §1.1) |
 | `ModelDeployment` | `utils/types.ts` | full `model_deployments` row (MASTER §1.3) |
+| `SystemHealthLog`, `LogLevel`, `LOG_LEVEL_COLORS`, `logLevelColor()`, `formatLogTime()` | `utils/types.ts` | telemetry types + helpers (MASTER §1.5) |
 | `LiveMapProps` / `Props` | LiveMap / LeafletMap | `{ logs: DiagnosticLog[] }` |
-| Dashboard state | `page.tsx` | counts:`number`, `deployment: ModelDeployment\|null`, `mapLogs: DiagnosticLog[]`, `isLoading` |
-| `telemetryStream` | `page.tsx` | `string[]` — **hardcoded fake** (see §8 E-3) |
+| Dashboard state | `page.tsx` | counts: `number`, `deployment: ModelDeployment\|null`, `mapLogs: DiagnosticLog[]`, `telemetryLogs: SystemHealthLog[]`, `isLoading`, `errorMsg` |
 
 > Supabase responses are cast to these types at the query boundary in `page.tsx`.
 > The cast is unchecked (PostgREST returns `any`-ish) — see F-2.
@@ -154,12 +156,11 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 ### Hardcoded constants
 | Value | Location | Concern |
 |---|---|---|
-| `'89.4%'` Mean Engine Confidence | page | static fake metric (MASTER #12) |
-| model fallbacks `Flee-v1.0.4-stb / 0.88 / 0.89 / 0.87` | page | shown if query fails |
-| `telemetryStream` lines | page | fabricated (MASTER #13) |
+| model fallbacks `Flee-v1.0.4-stb / 0.88 / 0.89 / 0.87` | page | shown when `model_deployments` query fails or returns no row |
 | map center `[30.1575, 71.5249]` (Multan), zoom `7` | LeafletMap | fixed viewport |
-| realtime channel `'cottonace-mops-stream'` | page | — |
-| `.limit(50)` | page | map shows 50 most recent only |
+| realtime channel name `'cottonace-mops-stream'` | page | — |
+| `.limit(50)` diagnostic_logs | page | map + mean confidence uses 50 most recent rows |
+| `.limit(10)` system_health_telemetry | page | telemetry console shows 10 most recent entries |
 
 ### External CDN
 | URL | Location | Purpose |
@@ -173,8 +174,9 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 ## 7. ⚠ Flags: shapes assumed but not validated
 
-- **F-1 — Webhook field mismatch (backend bug, MASTER #14).** `main.py` declares
-  `schema_name`; Supabase sends `schema`. Needs a pydantic alias. (Backend-owned.)
+- **F-1 — Webhook field mismatch — ✅ resolved in backend (MASTER v2 §9).**
+  `main.py` previously declared `schema_name`; Supabase sends `schema`. Backend
+  has since added a pydantic alias. No dashboard action needed.
 - **F-2 — Supabase casts are unchecked.** Rows are cast to `DiagnosticLog` /
   `ModelDeployment` at the query boundary without runtime validation; a
   renamed/missing column surfaces as `undefined`/`N/A`, not an error. A schema
@@ -232,9 +234,11 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 ## 9. Must stay in sync with MASTER-CONTRACTS.md
 
-1. Tables: `farmers_profiles`, `diagnostic_logs`, `model_deployments` (§1).
+1. Tables: `farmers_profiles`, `diagnostic_logs`, `model_deployments`, `system_health_telemetry` (§1).
 2. `diagnostic_logs` columns per MASTER §1.1 — **no `status`, no `image_url`**.
 3. `risk_level` ∈ `LOW|MEDIUM|HIGH|CRITICAL` (§4); colors in `utils/types.ts`.
-4. `model_deployments` flat score columns (§1.3).
+4. `model_deployments` flat score columns: `f1_score`, `precision_score`, `recall_score` (§1.3).
 5. `confidence_score` on 0.0–1.0 scale (§6); rendered `×100%`.
 6. Missing GPS is `null`, never `0.0` (§1.1).
+7. `system_health_telemetry` `log_level` ∈ `INFO|WARN|ERROR` (§1.5).
+8. `image_storage_path` is always optional — older rows have `null`; never assert non-null (MASTER §11 guardrail).
