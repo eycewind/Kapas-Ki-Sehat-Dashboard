@@ -78,6 +78,19 @@ MASTER §1; this lists only what the dashboard touches.
 > ❌ **No `status` column** (removed 2026-06-01 — it never existed; MASTER §1.1).
 > ❌ No `image_url`; the image path column is `image_storage_path`.
 
+### `system_health_telemetry` (MASTER §1.5)
+`select('*').order('created_at', desc).limit(10)` → telemetry console.
+Typed as `SystemHealthLog`. Realtime subscription triggers a telemetry-only
+re-fetch (does not re-run the full dashboard sync).
+
+| Column | Used at | Notes |
+|---|---|---|
+| `id` | LeafletMap | bigint, React key |
+| `log_level` | telemetry console | `INFO\|WARN\|ERROR`; drives color via `logLevelColor()` |
+| `component` | telemetry console | subsystem name |
+| `message` | telemetry console | log body |
+| `created_at` | telemetry console | formatted HH:MM:SS via `formatLogTime()` |
+
 ### `model_deployments` (MASTER §1.3)
 `select('*').eq('is_active_fleet_model', true).single()` → MLOps card.
 Typed as `ModelDeployment`.
@@ -173,15 +186,13 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 ## 8. ⚠ Inconsistencies & missing error handling (dashboard-owned)
 
-### Open (in-repo, but product/behavior decisions — not yet actioned)
-- **E-3b — Telemetry stream is fabricated.** Replacing it with real
-  `system_health_telemetry` data needs confirmation that the table is accessible
-  and what `log_level`/`component` values the backend emits.
-- **E-3c — "Real-time Inference Sync" has no date filter** despite implying
-  recency — counts all rows ever. Fixing it changes the displayed number.
-- **E-4 — Realtime only watches `diagnostic_logs`.** `farmers_profiles` and
-  `model_deployments` counts refresh on full page load only. Adding subscriptions
-  changes refresh behavior.
+### Open
+- **F-2 — Zod runtime validation.** Supabase rows are cast at the query boundary
+  without runtime validation; a renamed column silently surfaces as `undefined`.
+  Zod `safeParse` would catch contract regressions early. Deferred — needs a
+  decision on strictness given MASTER §10 known app data issues (#2–#4: the app
+  currently hardcodes `confidence_score`, `whitefly_count`, `inference_time_ms`).
+  Strict schemas would warn on every row until the app ships real values.
 
 ### Fixed since first audit (2026-06-01)
 **Contract alignment (round 1):**
@@ -195,11 +206,18 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 - ✅ Removed Math.random() React keys (now `log.id`).
 - ✅ Dropped external unpkg marker-icon dependency.
 
-**Metric accuracy (round 3):**
-- ✅ **E-3a** — "Mean Engine Confidence" is now computed as the average
-  `confidence_score` (0–1 → %) across the most-recent fetched `diagnostic_logs`
-  rows (only non-null scores counted). A "last N scans" sublabel is shown on the
-  card so the scope is transparent. Was a static hardcoded `89.4%`.
+**Metric accuracy + telemetry + realtime (round 3):**
+- ✅ **E-3a** — "Mean Engine Confidence" computed from real `confidence_score`
+  values across the most-recent fetched rows. Was static `89.4%`.
+- ✅ **E-3b** — Telemetry console reads live from `system_health_telemetry`
+  (last 10 rows, oldest→newest, color-coded by `log_level`). Was hardcoded fake
+  strings. Table confirmed in MASTER v2 §1.5.
+- ✅ **E-3c** — "Inference Scans" count uses a rolling 24-hour window (`.gte
+  created_at, now-24h`). Label updated from "Real-time Inference Sync". Rolling
+  window chosen over midnight-UTC cutoff to avoid a 5am PKT reset boundary.
+- ✅ **E-4** — Realtime channel now subscribes to all four tables:
+  `diagnostic_logs`, `farmers_profiles`, `model_deployments` → re-run full sync;
+  `system_health_telemetry` → re-run telemetry-only query (lightweight).
 
 **Error handling / robustness (round 2):**
 - ✅ **E-1** — every Supabase query's `error` field is now inspected; the first

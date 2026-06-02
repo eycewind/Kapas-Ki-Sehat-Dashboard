@@ -44,6 +44,41 @@ export interface DiagnosticLog {
   agricultural_belt: string | null;
 }
 
+// §1.5 system_health_telemetry — log_level is one of exactly three values.
+export type LogLevel = 'INFO' | 'WARN' | 'ERROR';
+
+export interface SystemHealthLog {
+  id: number;
+  device_id: string | null;
+  log_level: LogLevel;
+  component: string;
+  message: string;
+  stack_trace: string | null;
+  created_at: string | null;
+}
+
+export const LOG_LEVEL_COLORS: Record<LogLevel, string> = {
+  INFO: '#6BE675',   // green
+  WARN: '#F4B740',   // amber
+  ERROR: '#F45B5B',  // red
+};
+
+export function logLevelColor(level: unknown): string {
+  return typeof level === 'string' && level in LOG_LEVEL_COLORS
+    ? LOG_LEVEL_COLORS[level as LogLevel]
+    : '#9CA3AF';
+}
+
+// Format an ISO timestamp to HH:MM:SS for the telemetry console.
+export function formatLogTime(isoString: string | null): string {
+  if (!isoString) return '--:--:--';
+  return new Date(isoString).toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 // §1.3 model_deployments. Score columns are FLAT (not nested under `scores`).
 export interface ModelDeployment {
   id: string;

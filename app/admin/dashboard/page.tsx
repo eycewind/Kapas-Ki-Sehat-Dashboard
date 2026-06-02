@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { Users, Activity, AlertTriangle, Crosshair, Server, Database, Play, Terminal } from 'lucide-react';
 import { supabase } from '../../../utils/supabase';
-import type { DiagnosticLog, ModelDeployment } from '../../../utils/types';
+import type { DiagnosticLog, ModelDeployment, SystemHealthLog } from '../../../utils/types';
+import { logLevelColor, formatLogTime } from '../../../utils/types';
 import dynamic from 'next/dynamic';
 
 // Clean standard lazy-loading syntax targeting default export
@@ -19,14 +20,6 @@ const LiveMap = dynamic(
   }
 );
 
-const telemetryStream = [
-  '[SYS] 10:45:01 - Edge node cf5387a9 connected (Latency: 42ms)',
-  '[ML] 10:45:03 - Inference batch #89201 processed successfully',
-  '[SYS] 10:45:10 - Syncing regional weather parameters for Multan...',
-  '[WARN] 10:45:14 - High GPU memory utilization detected on Node 3',
-  '[SYS] 10:45:18 - Storage bucket replication complete (2.4GB)',
-];
-
 export default function AdminDashboard() {
   // 1. Establish State Hooks for Reactive Dashboard Parameters
   const [farmersCount, setFarmersCount] = useState(0);
@@ -35,6 +28,7 @@ export default function AdminDashboard() {
   const [deployment, setDeployment] = useState<ModelDeployment | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [mapLogs, setMapLogs] = useState<DiagnosticLog[]>([]);
+  const [telemetryLogs, setTelemetryLogs] = useState<SystemHealthLog[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   // 2. Central Sync Function to Load Active Telemetry
@@ -46,10 +40,13 @@ export default function AdminDashboard() {
         supabase
           .from('farmers_profiles')
           .select('*', { count: 'exact', head: true }),
-        // Overall count of incoming inference sync logs
+        // Count of inference scans in the rolling 24-hour window.
+        // Rolling window (not "today") avoids a midnight-UTC reset that falls at
+        // 5am PKT — an awkward boundary for Pakistani admins.
         supabase
           .from('diagnostic_logs')
-          .select('*', { count: 'exact', head: true }),
+          .select('*', { count: 'exact', head: true })
+          .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
         // Count of logs flagged at the CRITICAL risk level
         supabase
           .from('diagnostic_logs')
@@ -97,26 +94,49 @@ export default function AdminDashboard() {
     }
   };
 
-  // 3. Initialize Subscription Channel Listeners
+  // 3. Fetch the 10 most-recent system_health_telemetry rows.
+  // Kept separate from synchronizeDashboardData so realtime telemetry events
+  // only re-fetch this lightweight query, not all five dashboard queries.
+  const synchronizeTelemetry = async () => {
+    const { data, error } = await supabase
+      .from('system_health_telemetry')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (error) {
+      console.error('[TELEMETRY] Fetch error:', error);
+      return; // keep whatever was last shown — don't clear on transient error
+    }
+    // Store descending; we'll reverse for display so the latest line sits at the bottom.
+    setTelemetryLogs((data as SystemHealthLog[]) || []);
+  };
+
+  // 4. Initialize Subscription Channel Listeners
   useEffect(() => {
     synchronizeDashboardData();
+    synchronizeTelemetry();
 
     console.log("Base dashboard synchronization metrics loaded.");
 
     const realtimeChannel = supabase
       .channel('cottonace-mops-stream')
-      .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'diagnostic_logs' 
-        },
-        (payload) => {
-          console.log('🔄 Realtime system sync ping captured:', payload);
-          synchronizeDashboardData();
-        }
-      )
+      // diagnostic_logs: re-sync dashboard counts + map on any change
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_logs' }, () => {
+        synchronizeDashboardData();
+      })
+      // farmers_profiles: keeps Active Farmers count live
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'farmers_profiles' }, () => {
+        synchronizeDashboardData();
+      })
+      // model_deployments: reflects a newly activated model without a page reload
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'model_deployments' }, () => {
+        synchronizeDashboardData();
+      })
+      // system_health_telemetry: only re-fetches the lightweight telemetry query
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_health_telemetry' }, () => {
+        synchronizeTelemetry();
+      })
       .subscribe();
 
     return () => {
@@ -138,7 +158,7 @@ export default function AdminDashboard() {
   // Map Macro Metrics Arrays for UI Iteration
   const macroMetrics = [
     { label: 'Active Farmers', value: farmersCount.toLocaleString(), icon: Users, color: 'text-blue-400', sublabel: '' },
-    { label: 'Real-time Inference Sync', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-[#6BE675]', sublabel: '' },
+    { label: 'Inference Scans', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-[#6BE675]', sublabel: 'last 24 hours' },
     { label: 'Critical Outbreak Warnings', value: criticalCount, icon: AlertTriangle, color: 'text-red-400', sublabel: '' },
     { label: 'Mean Engine Confidence', value: meanConfidenceDisplay, icon: Crosshair, color: 'text-[#F4B740]', sublabel: scoredLogs.length > 0 ? `last ${scoredLogs.length} scans` : '' },
   ];
@@ -223,21 +243,33 @@ export default function AdminDashboard() {
             {/* Live Interactive Map Wrapper */}
             <LiveMap logs={mapLogs} />
 
-            {/* Telemetry Streams Console */}
+            {/* System Health Telemetry Console — live from system_health_telemetry */}
             <div className="bg-[#0B1110] border border-[#2A3831] rounded-xl p-4 shadow-inner relative overflow-hidden">
               <div className="flex items-center space-x-2 mb-3 border-b border-[#2A3831] pb-2">
                 <Terminal className="w-4 h-4 text-gray-500" />
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">System Stability Telemetry Streams</span>
+                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">System Health Telemetry</span>
               </div>
-              <div className="font-mono text-sm space-y-1.5 text-[#6BE675]">
-                {telemetryStream.map((log, i) => (
-                  <div key={i} className="opacity-90 hover:opacity-100 transition-opacity">
-                    <span className="text-gray-500 mr-2">{'>'}</span>{log}
-                  </div>
-                ))}
-                <div className="animate-pulse flex">
-                  <span className="text-gray-500 mr-2">{'>'}</span>
-                  <span className="w-2 h-4 bg-[#6BE675] inline-block mt-0.5"></span>
+              <div className="font-mono text-sm space-y-1.5">
+                {telemetryLogs.length === 0 ? (
+                  <p className="text-gray-600 text-xs">No telemetry entries yet.</p>
+                ) : (
+                  // Reverse so the most-recent entry sits at the bottom (terminal convention).
+                  [...telemetryLogs].reverse().map((log) => (
+                    <div key={log.id} className="opacity-90 hover:opacity-100 transition-opacity flex items-start space-x-2">
+                      <span className="text-gray-600 flex-shrink-0">{'>'}</span>
+                      <span style={{ color: logLevelColor(log.log_level) }}>
+                        [{log.log_level}]
+                      </span>
+                      <span className="text-gray-500 flex-shrink-0">{formatLogTime(log.created_at)}</span>
+                      <span className="text-gray-400">
+                        <span className="text-gray-300">{log.component}</span>: {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
+                <div className="animate-pulse flex items-center space-x-2 mt-1">
+                  <span className="text-gray-600">{'>'}</span>
+                  <span className="w-2 h-4 bg-[#6BE675] inline-block"></span>
                 </div>
               </div>
             </div>
