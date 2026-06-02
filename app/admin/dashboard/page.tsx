@@ -124,12 +124,23 @@ export default function AdminDashboard() {
     };
   }, []);
 
+  // Derive mean confidence from the 50 most-recent diagnostic_logs rows already in state.
+  // Only rows that carry a non-null confidence_score (0.0–1.0 scale) are included.
+  const scoredLogs = mapLogs.filter((l) => l.confidence_score != null);
+  const meanConfidenceDisplay = isLoading
+    ? '–'
+    : scoredLogs.length > 0
+    ? `${Math.round(
+        (scoredLogs.reduce((sum, l) => sum + l.confidence_score, 0) / scoredLogs.length) * 100
+      )}%`
+    : 'N/A';
+
   // Map Macro Metrics Arrays for UI Iteration
   const macroMetrics = [
-    { label: 'Active Farmers', value: farmersCount.toLocaleString(), icon: Users, color: 'text-blue-400' },
-    { label: 'Real-time Inference Sync', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-[#6BE675]' },
-    { label: 'Critical Outbreak Warnings', value: criticalCount, icon: AlertTriangle, color: 'text-red-400' },
-    { label: 'Mean Engine Confidence', value: '89.4%', icon: Crosshair, color: 'text-[#F4B740]' },
+    { label: 'Active Farmers', value: farmersCount.toLocaleString(), icon: Users, color: 'text-blue-400', sublabel: '' },
+    { label: 'Real-time Inference Sync', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-[#6BE675]', sublabel: '' },
+    { label: 'Critical Outbreak Warnings', value: criticalCount, icon: AlertTriangle, color: 'text-red-400', sublabel: '' },
+    { label: 'Mean Engine Confidence', value: meanConfidenceDisplay, icon: Crosshair, color: 'text-[#F4B740]', sublabel: scoredLogs.length > 0 ? `last ${scoredLogs.length} scans` : '' },
   ];
 
   // Map Model Metrics — flat columns per MASTER-CONTRACTS.md §1.3.
@@ -190,6 +201,9 @@ export default function AdminDashboard() {
                   <div>
                     <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{metric.label}</p>
                     <h3 className={`text-2xl font-bold mt-2 ${idx === 3 ? 'text-[#F4B740]' : 'text-white'}`}>{metric.value}</h3>
+                    {metric.sublabel ? (
+                      <p className="text-[10px] text-gray-600 mt-1">{metric.sublabel}</p>
+                    ) : null}
                   </div>
                   <div className={`p-2 bg-[#0B1110] rounded-lg border border-[#2A3831]`}>
                     <Icon className={`w-5 h-5 ${metric.color}`} />

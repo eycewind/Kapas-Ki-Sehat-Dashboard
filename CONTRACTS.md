@@ -174,9 +174,11 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 ## 8. ⚠ Inconsistencies & missing error handling (dashboard-owned)
 
 ### Open (in-repo, but product/behavior decisions — not yet actioned)
-- **E-3 — Misleading / fake metrics.** "Real-time Inference Sync" counts *all*
-  rows (no date filter); "Mean Engine Confidence" is a static `89.4%`; telemetry
-  stream is fabricated. Fixing these changes what's displayed → needs product call.
+- **E-3b — Telemetry stream is fabricated.** Replacing it with real
+  `system_health_telemetry` data needs confirmation that the table is accessible
+  and what `log_level`/`component` values the backend emits.
+- **E-3c — "Real-time Inference Sync" has no date filter** despite implying
+  recency — counts all rows ever. Fixing it changes the displayed number.
 - **E-4 — Realtime only watches `diagnostic_logs`.** `farmers_profiles` and
   `model_deployments` counts refresh on full page load only. Adding subscriptions
   changes refresh behavior.
@@ -192,6 +194,12 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
   `district / risk_level / whitefly_count / confidence`.
 - ✅ Removed Math.random() React keys (now `log.id`).
 - ✅ Dropped external unpkg marker-icon dependency.
+
+**Metric accuracy (round 3):**
+- ✅ **E-3a** — "Mean Engine Confidence" is now computed as the average
+  `confidence_score` (0–1 → %) across the most-recent fetched `diagnostic_logs`
+  rows (only non-null scores counted). A "last N scans" sublabel is shown on the
+  card so the scope is transparent. Was a static hardcoded `89.4%`.
 
 **Error handling / robustness (round 2):**
 - ✅ **E-1** — every Supabase query's `error` field is now inspected; the first
