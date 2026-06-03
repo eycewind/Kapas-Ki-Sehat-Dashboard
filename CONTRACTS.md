@@ -71,8 +71,8 @@ MASTER §1; this lists only what the dashboard touches.
 | `id` | LeafletMap | uuid | React key |
 | `created_at` | page | timestamptz | sort key (desc) |
 | `risk_level` | page + LeafletMap | `RiskLevel` | KPI filter + marker color + popup |
-| `latitude` | LeafletMap | number\|null | null when GPS unavailable |
-| `longitude` | LeafletMap | number\|null | null when GPS unavailable |
+| `latitude` | LeafletMap | number\|null | null when GPS unavailable; exact `0.0` also rejected (see note) |
+| `longitude` | LeafletMap | number\|null | null when GPS unavailable; exact `0.0/0.0` also rejected (see note) |
 | `district` | LeafletMap | string | popup title (primary) |
 | `agricultural_belt` | LeafletMap | string\|null | popup title fallback |
 | `whitefly_count` | LeafletMap | number | popup |
@@ -80,6 +80,14 @@ MASTER §1; this lists only what the dashboard touches.
 
 > ❌ **No `status` column** (removed 2026-06-01 — it never existed; MASTER §1.1).
 > ❌ No `image_url`; the image path column is `image_storage_path`.
+>
+> ⚠️ **Coordinate filter:** `LeafletMap` rejects a row if `latitude` or
+> `longitude` is `null` OR if both are exactly `0.0`. The app's legacy bug
+> (MASTER §9, A6 — fix pending on app side) sends `0.0/0.0` when GPS is
+> unavailable instead of `null`. Exact `(0, 0)` maps to Null Island (Gulf of
+> Guinea) and is invisible on the Pakistan viewport, so it is treated as
+> no-location. A row where only one axis is `0` (e.g. lat=0, lon=71.5) still
+> passes — only the exact double-zero pair is blocked.
 >
 > ⚠️ **Current live-data state (MASTER v4 §4):** backend `/scan` hardcodes
 > `whitefly_count = 12`, so `derive_risk_level` always returns `HIGH` for any

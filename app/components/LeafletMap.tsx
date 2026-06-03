@@ -36,7 +36,12 @@ export default function LeafletMap({ logs }: Props) {
       log?.latitude != null &&
       log?.longitude != null &&
       Number.isFinite(lat) &&
-      Number.isFinite(lon)
+      Number.isFinite(lon) &&
+      // Reject exact (0, 0) — app legacy bug sends 0.0/0.0 when GPS is
+      // unavailable instead of null (MASTER §9, app-side fix pending).
+      // Only exact double-zero is blocked; real coordinates where one axis
+      // happens to be 0 (e.g. lat=0, lon=71.5) still pass.
+      !(lat === 0 && lon === 0)
     );
   });
 
