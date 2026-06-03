@@ -5,7 +5,7 @@ dashboard. This file is the dashboard team's working source of truth and is kept
 **aligned to `MASTER-CONTRACTS.md`** (the cross-repo authority). Where the two
 ever disagree, MASTER-CONTRACTS.md wins and this file gets corrected.
 
-- **Last reconciled with MASTER-CONTRACTS.md:** 2026-06-02 (v2)
+- **Last reconciled with MASTER-CONTRACTS.md:** 2026-06-03 (v4)
 - **Last verified against actual code:** 2026-06-03
 - **Scope:** the `KapasKiSehat_Dashboard` repo only. The dashboard is read-only
   against Supabase and (currently) calls no backend HTTP endpoints.
@@ -36,13 +36,12 @@ Realtime). See §3.
 
 - The MLOps **"Trigger Continuous Training Cycle"** button
   ([`page.tsx`](app/admin/dashboard/page.tsx)) has no handler — visual stub.
-- **Gap (not yet built):** MASTER §3.3 lists `GET /api/v1/risk-metrics` as a
-  dashboard→backend call. The dashboard does not yet call it.
-
-### 2b. FastAPI webhook (in repo, NOT called by dashboard)
-`POST /api/v1/supabase-webhook` ([`main.py`](main.py)) — receives Supabase
-webhooks. Documented fully in MASTER §3.2. See §7 F-1 — the `schema_name` field
-bug is still present in this repo's copy of `main.py`.
+- **Gap (not yet built):** MASTER §3.3 lists `GET /api/v1/risk-metrics` and
+  §3.4 `POST /api/v1/chat` as available backend endpoints. The dashboard
+  does not yet consume either.
+- **`main.py` deleted 2026-06-03.** This repo previously contained a stale
+  orphaned copy of the FastAPI webhook handler. It has been removed per MASTER v4
+  §10 D1. The real backend lives in `KapasKiSehat_Backend`.
 
 ---
 
@@ -81,11 +80,21 @@ MASTER §1; this lists only what the dashboard touches.
 
 > ❌ **No `status` column** (removed 2026-06-01 — it never existed; MASTER §1.1).
 > ❌ No `image_url`; the image path column is `image_storage_path`.
+>
+> ⚠️ **Current live-data state (MASTER v4 §4):** backend `/scan` hardcodes
+> `whitefly_count = 12`, so `derive_risk_level` always returns `HIGH` for any
+> pest and `LOW` for healthy. Map markers currently show only orange (HIGH) and
+> green (LOW) — `MEDIUM`/`CRITICAL` cannot occur until §11 (real whitefly_count)
+> lands. The dashboard correctly reads and displays whatever value is stored.
 
 ### `system_health_telemetry` (MASTER §1.5)
 `select('*').order('created_at', desc).limit(10)` → telemetry console.
 Typed as `SystemHealthLog`. Realtime subscription triggers a telemetry-only
 re-fetch (does not re-run the full dashboard sync).
+
+> ⚠️ **No component writes to this table yet** (MASTER v4 §1.5 note). The
+> telemetry console will show "No telemetry entries yet." until the backend
+> starts emitting records here.
 
 | Column | Used at | Notes |
 |---|---|---|
@@ -152,8 +161,8 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 ### Env vars (required; app throws at startup if missing) — `utils/supabase.ts`
 | Var | Used for |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (must match backend, MASTER §8) |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon key (browser-exposed → relies on RLS) |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (must match backend, MASTER §8.3) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **JWT anon key** (`eyJh…` format) — browser-exposed, relies on RLS. Do NOT use `sb_publishable_…` format (MASTER §8.1) |
 
 ### Hardcoded constants
 | Value | Location | Concern |
@@ -176,24 +185,27 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 ## 7. ⚠ Flags: shapes assumed but not validated
 
-- **F-1 — Webhook field mismatch — ⚠️ still present in this repo's `main.py`.**
-  `main.py:10` declares `schema_name: str`; Supabase sends the field as `schema`.
-  Real Supabase webhook payloads will 422 against this file as-is.
-  Note: MASTER v2 §9 marks this ✅ for the **`KapasKiSehat_Backend`** repo, which
-  has a pydantic alias fix. The `main.py` in this dashboard repo is a separate,
-  stale copy that has **not** received that fix. Verified 2026-06-03.
-- **F-2 — Supabase casts are unchecked.** Rows are cast to `DiagnosticLog` /
-  `ModelDeployment` at the query boundary without runtime validation; a
-  renamed/missing column surfaces as `undefined`/`N/A`, not an error. A schema
-  validator (e.g. zod) would close this.
-- **F-3 — `risk_level` not constrained at the DB.** MASTER §4 recommends a CHECK
-  constraint; until then non-canonical values render as gray markers.
+- **F-1 — ✅ Closed 2026-06-03.** The orphaned `main.py` (which carried the
+  `schema_name` bug) has been deleted per MASTER v4 §10 D1. The real fix
+  (pydantic alias) lives in `KapasKiSehat_Backend`. Nothing remains in this repo.
+- **F-2 — Supabase casts are unchecked (X2 in MASTER v4).** Rows are cast to
+  typed interfaces without runtime validation. Zod `safeParse` would catch
+  contract regressions early. Timing: defer until after MASTER §11 (real
+  `whitefly_count`) lands — currently all pest rows carry `whitefly_count = 12`
+  (backend stub), and strict schemas would fire noisy false warnings on every row.
+  Good candidate once §11 is done.
+- **F-3 — `risk_level` not constrained at the DB (X3 in MASTER v4).** No CHECK
+  constraint; non-canonical values render as gray markers on the map.
 
 ---
 
 ## 8. ⚠ Inconsistencies & missing error handling (dashboard-owned)
 
 ### Open
+- **§11 — Real `whitefly_count` (MASTER v4 current work item — backend-primary).**
+  Dashboard guardrail: **no changes required**. The map popup already shows
+  `whitefly_count` and will automatically display varied values once the backend
+  ships a real count. Do NOT hardcode any expected range.
 - **F-2 — Zod runtime validation.** Supabase rows are cast at the query boundary
   without runtime validation; a renamed column silently surfaces as `undefined`.
   Zod `safeParse` would catch contract regressions early. Deferred — needs a
@@ -212,6 +224,11 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
   `district / risk_level / whitefly_count / confidence`.
 - ✅ Removed Math.random() React keys (now `log.id`).
 - ✅ Dropped external unpkg marker-icon dependency.
+
+**MASTER v4 reconciliation (round 4):**
+- ✅ **D1** — Deleted orphaned `main.py`. It was a stale copy of the FastAPI
+  webhook handler (with the `schema_name` bug) that served no purpose in this
+  repo. Real backend is in `KapasKiSehat_Backend`.
 
 **Metric accuracy + telemetry + realtime (round 3):**
 - ✅ **E-3a** — "Mean Engine Confidence" computed from real `confidence_score`
@@ -247,3 +264,5 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 6. Missing GPS is `null`, never `0.0` (§1.1).
 7. `system_health_telemetry` `log_level` ∈ `INFO|WARN|ERROR` (§1.5).
 8. `image_storage_path` is always optional — older rows have `null`; never assert non-null (MASTER §11 guardrail).
+9. `NEXT_PUBLIC_SUPABASE_ANON_KEY` must be **JWT format** (`eyJh…`) — not `sb_publishable_…` (MASTER §8.1).
+10. Do not hardcode any expected `whitefly_count` range — will vary once §11 lands.
