@@ -6,6 +6,7 @@ dashboard. This file is the dashboard team's working source of truth and is kept
 ever disagree, MASTER-CONTRACTS.md wins and this file gets corrected.
 
 - **Last reconciled with MASTER-CONTRACTS.md:** 2026-06-02 (v2)
+- **Last verified against actual code:** 2026-06-03
 - **Scope:** the `KapasKiSehat_Dashboard` repo only. The dashboard is read-only
   against Supabase and (currently) calls no backend HTTP endpoints.
 
@@ -40,7 +41,8 @@ Realtime). See §3.
 
 ### 2b. FastAPI webhook (in repo, NOT called by dashboard)
 `POST /api/v1/supabase-webhook` ([`main.py`](main.py)) — receives Supabase
-webhooks. Documented fully in MASTER §3.2. See §7 F-1 for the `schema` field bug.
+webhooks. Documented fully in MASTER §3.2. See §7 F-1 — the `schema_name` field
+bug is still present in this repo's copy of `main.py`.
 
 ---
 
@@ -75,7 +77,7 @@ MASTER §1; this lists only what the dashboard touches.
 | `district` | LeafletMap | string | popup title (primary) |
 | `agricultural_belt` | LeafletMap | string\|null | popup title fallback |
 | `whitefly_count` | LeafletMap | number | popup |
-| `confidence_score` | LeafletMap | number 0–1 | popup, rendered `×100%` |
+| `confidence_score` | page + LeafletMap | number 0–1 | `page.tsx`: mean confidence KPI (avg of non-null scores × 100); `LeafletMap`: popup |
 
 > ❌ **No `status` column** (removed 2026-06-01 — it never existed; MASTER §1.1).
 > ❌ No `image_url`; the image path column is `image_storage_path`.
@@ -133,7 +135,7 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 | Definition | Location | Shape |
 |---|---|---|
-| `RiskLevel`, `RISK_LEVELS`, `RISK_COLORS`, `riskColor()`, `isRiskLevel()` | `utils/types.ts` | risk enum + helpers (MASTER §4) |
+| `RiskLevel`, `RISK_LEVELS`, `RISK_COLORS`, `UNKNOWN_RISK_COLOR`, `riskColor()`, `isRiskLevel()` | `utils/types.ts` | risk enum + helpers (MASTER §4) |
 | `DiagnosticLog` | `utils/types.ts` | full `diagnostic_logs` row (MASTER §1.1) |
 | `ModelDeployment` | `utils/types.ts` | full `model_deployments` row (MASTER §1.3) |
 | `SystemHealthLog`, `LogLevel`, `LOG_LEVEL_COLORS`, `logLevelColor()`, `formatLogTime()` | `utils/types.ts` | telemetry types + helpers (MASTER §1.5) |
@@ -174,9 +176,12 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 ## 7. ⚠ Flags: shapes assumed but not validated
 
-- **F-1 — Webhook field mismatch — ✅ resolved in backend (MASTER v2 §9).**
-  `main.py` previously declared `schema_name`; Supabase sends `schema`. Backend
-  has since added a pydantic alias. No dashboard action needed.
+- **F-1 — Webhook field mismatch — ⚠️ still present in this repo's `main.py`.**
+  `main.py:10` declares `schema_name: str`; Supabase sends the field as `schema`.
+  Real Supabase webhook payloads will 422 against this file as-is.
+  Note: MASTER v2 §9 marks this ✅ for the **`KapasKiSehat_Backend`** repo, which
+  has a pydantic alias fix. The `main.py` in this dashboard repo is a separate,
+  stale copy that has **not** received that fix. Verified 2026-06-03.
 - **F-2 — Supabase casts are unchecked.** Rows are cast to `DiagnosticLog` /
   `ModelDeployment` at the query boundary without runtime validation; a
   renamed/missing column surfaces as `undefined`/`N/A`, not an error. A schema
