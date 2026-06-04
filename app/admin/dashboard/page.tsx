@@ -1,6 +1,6 @@
 'use client'; // Shift this component into client-side runtime execution
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Users, Activity, AlertTriangle, Crosshair, Server, Database, Play, Terminal } from 'lucide-react';
 import { supabase } from '../../../utils/supabase';
 import type { DiagnosticLog, ModelDeployment, SystemHealthLog } from '../../../utils/types';
@@ -30,6 +30,10 @@ export default function AdminDashboard() {
   const [mapLogs, setMapLogs] = useState<DiagnosticLog[]>([]);
   const [telemetryLogs, setTelemetryLogs] = useState<SystemHealthLog[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Incremented on every effect mount. useRef persists across StrictMode's
+  // mount→cleanup→remount cycle, so each mount gets a strictly different integer
+  // even when both Date.now() calls would return the same millisecond.
+  const realtimeMountId = useRef(0);
 
   // 2. Central Sync Function to Load Active Telemetry
   const synchronizeDashboardData = async () => {
@@ -119,14 +123,15 @@ export default function AdminDashboard() {
 
     console.log("Base dashboard synchronization metrics loaded.");
 
-    // Unique channel name per mount. React StrictMode (Next.js dev) double-mounts
-    // effects: mount → cleanup (CLOSED) → remount. If both mounts share the same
-    // channel name, Supabase's client registry treats them as the same channel,
-    // so the cleanup tears down the live subscription. A unique name per mount
-    // means each effect run gets an independent channel; the cleanup only
-    // removes the instance it created, never touching the surviving one.
-    const realtimeChannel = supabase
-      .channel(`cottonace-mops-stream-${Date.now()}`)
+    // Unique channel name per mount — collision-proof via a useRef counter.
+    // Date.now() is NOT safe here: React StrictMode's mount→cleanup→remount
+    // runs synchronously within a single JS tick, so both calls can return
+    // the identical millisecond timestamp. The ref increments on every mount,
+    // giving mount-1 → "...-1" and mount-2 → "...-2" with no possible clash.
+    realtimeMountId.current += 1;
+    const channelName = `cottonace-mops-stream-${realtimeMountId.current}`;
+    console.log('[Realtime] creating channel:', channelName); // DIAGNOSTIC
+    const realtimeChannel = supabase.channel(channelName)
       // diagnostic_logs: re-sync dashboard counts + map on any change
       .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_logs' }, (payload) => {
         // DIAGNOSTIC: confirm handler fires and what event type arrives
