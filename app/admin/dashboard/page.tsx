@@ -119,25 +119,40 @@ export default function AdminDashboard() {
 
     console.log("Base dashboard synchronization metrics loaded.");
 
+    // Unique channel name per mount. React StrictMode (Next.js dev) double-mounts
+    // effects: mount → cleanup (CLOSED) → remount. If both mounts share the same
+    // channel name, Supabase's client registry treats them as the same channel,
+    // so the cleanup tears down the live subscription. A unique name per mount
+    // means each effect run gets an independent channel; the cleanup only
+    // removes the instance it created, never touching the surviving one.
     const realtimeChannel = supabase
-      .channel('cottonace-mops-stream')
+      .channel(`cottonace-mops-stream-${Date.now()}`)
       // diagnostic_logs: re-sync dashboard counts + map on any change
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_logs' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_logs' }, (payload) => {
+        // DIAGNOSTIC: confirm handler fires and what event type arrives
+        console.log('[Realtime] diagnostic_logs event — type:', payload.eventType, '| payload:', payload);
         synchronizeDashboardData();
+        console.log('[Realtime] synchronizeDashboardData() called');
       })
       // farmers_profiles: keeps Active Farmers count live
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'farmers_profiles' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'farmers_profiles' }, (payload) => {
+        console.log('[Realtime] farmers_profiles event — type:', payload.eventType);
         synchronizeDashboardData();
       })
       // model_deployments: reflects a newly activated model without a page reload
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'model_deployments' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'model_deployments' }, (payload) => {
+        console.log('[Realtime] model_deployments event — type:', payload.eventType);
         synchronizeDashboardData();
       })
       // system_health_telemetry: only re-fetches the lightweight telemetry query
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_health_telemetry' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_health_telemetry' }, (payload) => {
+        console.log('[Realtime] system_health_telemetry event — type:', payload.eventType);
         synchronizeTelemetry();
       })
-      .subscribe();
+      // DIAGNOSTIC: log every channel status transition
+      .subscribe((status, err) => {
+        console.log('[Realtime] channel status:', status, err ? `| error: ${err.message}` : '');
+      });
 
     return () => {
       supabase.removeChannel(realtimeChannel);
