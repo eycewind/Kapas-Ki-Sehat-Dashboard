@@ -19,7 +19,7 @@ export default function LiveMap({ logs }: LiveMapProps) {
 
   if (!MapWidget) {
     return (
-      <div className="h-full w-full min-h-[400px] bg-[#151D1A] rounded-xl border border-[#2A3831] flex items-center justify-center text-sm font-mono text-gray-500 animate-pulse">
+      <div className="h-full w-full min-h-[400px] lg:min-h-[560px] bg-[#151D1A] rounded-xl border border-[#2A3831] flex items-center justify-center text-sm font-mono text-gray-500 animate-pulse">
         🛰️ Loading Core Geographic Layer Space...
       </div>
     );

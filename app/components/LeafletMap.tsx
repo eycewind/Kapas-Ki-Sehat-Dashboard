@@ -60,7 +60,7 @@ export default function LeafletMap({ logs }: Props) {
   });
 
   return (
-    <div className="w-full rounded-xl overflow-hidden border border-[#2A3831]" style={{ height: '400px' }}>
+    <div className="w-full rounded-xl overflow-hidden border border-[#2A3831] h-[400px] lg:h-[560px]">
       <MapContainer
         center={[30.1575, 71.5249]}
         zoom={7}

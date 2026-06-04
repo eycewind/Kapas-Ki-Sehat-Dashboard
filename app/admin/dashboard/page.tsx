@@ -13,7 +13,7 @@ const LiveMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center h-[400px] text-sm text-gray-500 font-mono animate-pulse bg-[#151D1A] rounded-xl border border-[#2A3831]">
+      <div className="flex items-center justify-center h-[400px] lg:h-[560px] text-sm text-gray-500 font-mono animate-pulse bg-[#151D1A] rounded-xl border border-[#2A3831]">
         🛰️ Synchronizing Geographic Mesh Array...
       </div>
     )
