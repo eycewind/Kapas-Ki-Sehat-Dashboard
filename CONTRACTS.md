@@ -26,6 +26,35 @@ changes on four tables (`diagnostic_logs`, `farmers_profiles`,
 `model_deployments`, `system_health_telemetry`), and renders a map, telemetry
 console, and MLOps panel. No write path.
 
+### Realtime requirements (operational — easy to get wrong)
+
+Each subscribed table **must be a member of the `supabase_realtime` publication**
+or its channel is rejected. Verify / set up in the Supabase SQL editor:
+
+```sql
+-- Verify (must list all four tables):
+SELECT schemaname, tablename FROM pg_publication_tables WHERE pubname = 'supabase_realtime';
+
+-- Add any missing ones:
+ALTER PUBLICATION supabase_realtime ADD TABLE diagnostic_logs;
+ALTER PUBLICATION supabase_realtime ADD TABLE farmers_profiles;
+ALTER PUBLICATION supabase_realtime ADD TABLE model_deployments;
+ALTER PUBLICATION supabase_realtime ADD TABLE system_health_telemetry;
+```
+
+- The dashboard subscribes with **one channel per table** (`cottonace-<table>-<mountId>`),
+  NOT a single shared channel. Reason: Supabase Realtime sends a `system`
+  "Unable to subscribe to changes" error and `phx_close`s the **entire** channel
+  if **any** of its `postgres_changes` bindings references a table not in the
+  publication — which would silently kill the valid feeds sharing that channel.
+  Per-table channels isolate that failure (verified via WS frame inspection
+  2026-06-04).
+- Channel names carry a per-mount counter (`useRef`) so React StrictMode's
+  dev double-mount can't orphan the live channel (a same-named teardown would
+  remove the wrong instance).
+- A `CHANNEL_ERROR` status in the console for one table almost always means that
+  table is missing from the publication.
+
 ---
 
 ## 2. API endpoints

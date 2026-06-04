@@ -37,7 +37,6 @@ export default function AdminDashboard() {
 
   // 2. Central Sync Function to Load Active Telemetry
   const synchronizeDashboardData = async () => {
-    console.log('[Sync] synchronizeDashboardData() START @', new Date().toISOString()); // DIAGNOSTIC
     try {
       // Run all reads in parallel; each result carries its own { data/count, error }.
       const [farmersRes, syncsRes, criticalRes, deploymentRes, mapRes] = await Promise.all([
@@ -85,12 +84,6 @@ export default function AdminDashboard() {
         setErrorMsg(null);
       }
 
-      // DIAGNOSTIC: show the counts each sync pulled, so a realtime-triggered
-      // refetch is visible (and we can confirm the value actually changed).
-      console.log('[Sync] fetched — farmers:', farmersRes.count,
-        '| scans24h:', syncsRes.count, '| critical:', criticalRes.count,
-        '| mapRows:', mapRes.data?.length);
-
       // Map whatever data did come back; a failed query leaves its slice at the safe default.
       setMapLogs((mapRes.data as DiagnosticLog[]) || []);
       setFarmersCount(farmersRes.count || 0);
@@ -128,75 +121,45 @@ export default function AdminDashboard() {
     synchronizeDashboardData();
     synchronizeTelemetry();
 
-    console.log("Base dashboard synchronization metrics loaded.");
-
-    // Unique channel name per mount — collision-proof via a useRef counter.
-    // Date.now() is NOT safe here: React StrictMode's mount→cleanup→remount
-    // runs synchronously within a single JS tick, so both calls can return
-    // the identical millisecond timestamp. The ref increments on every mount,
-    // giving mount-1 → "...-1" and mount-2 → "...-2" with no possible clash.
-    // DIAGNOSTIC (socket level): is the underlying websocket actually up?
-    // These fire for the shared RealtimeClient connection, independent of any
-    // single channel. If we never see "socket OPEN", the transport is the problem.
-    const rt: any = supabase.realtime;
-    console.log('[Realtime] socket isConnected() at mount:', rt?.isConnected?.());
-    try {
-      rt?.onOpen?.(() => console.log('[Realtime] socket OPEN'));
-      rt?.onClose?.(() => console.log('[Realtime] socket CLOSE'));
-      rt?.onError?.((e: any) => console.log('[Realtime] socket ERROR:', e?.message || e));
-    } catch (e) {
-      console.log('[Realtime] socket hook attach failed (non-fatal):', e);
-    }
-
+    // One channel PER TABLE — deliberately not a single shared channel.
+    //
+    // Supabase Realtime closes (phx_close) an entire channel if ANY of its
+    // postgres_changes bindings is rejected — e.g. a table not yet in the
+    // `supabase_realtime` publication returns a `system` "Unable to subscribe
+    // to changes" error and tears the whole channel down. When all tables
+    // shared one channel, the unpublished `system_health_telemetry` binding
+    // killed the valid `diagnostic_logs` feed along with it. Isolating each
+    // table means a single misconfigured table degrades only its own feed.
+    //
+    // The mount-id suffix keeps names unique across React StrictMode's
+    // mount→cleanup→remount cycle so the teardown of the first mount's
+    // channels can't orphan the second mount's live ones.
     realtimeMountId.current += 1;
-    const channelName = `cottonace-mops-stream-${realtimeMountId.current}`;
-    console.log('[Realtime] creating channel:', channelName); // DIAGNOSTIC
-    const realtimeChannel = supabase.channel(channelName)
-      // diagnostic_logs: re-sync dashboard counts + map on any change
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'diagnostic_logs' }, (payload) => {
-        // DIAGNOSTIC: confirm handler fires and what event type arrives
-        console.log('[Realtime] diagnostic_logs event — type:', payload.eventType, '| payload:', payload);
-        synchronizeDashboardData();
-        console.log('[Realtime] synchronizeDashboardData() called');
-      })
-      // farmers_profiles: keeps Active Farmers count live
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'farmers_profiles' }, (payload) => {
-        console.log('[Realtime] farmers_profiles event — type:', payload.eventType);
-        synchronizeDashboardData();
-      })
-      // model_deployments: reflects a newly activated model without a page reload
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'model_deployments' }, (payload) => {
-        console.log('[Realtime] model_deployments event — type:', payload.eventType);
-        synchronizeDashboardData();
-      })
-      // system_health_telemetry: only re-fetches the lightweight telemetry query
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'system_health_telemetry' }, (payload) => {
-        console.log('[Realtime] system_health_telemetry event — type:', payload.eventType);
-        synchronizeTelemetry();
-      })
-      // DIAGNOSTIC: log every channel status transition
-      .subscribe((status, err) => {
-        console.log('[Realtime] channel status:', status, err ? `| error: ${err.message}` : '');
-      });
+    const mountTag = realtimeMountId.current;
 
-    // DIAGNOSTIC (raw frames): override the channel's onMessage to log EVERY
-    // message routed to this channel, before binding-matching. This is the
-    // decisive probe — when you change a row:
-    //   • a frame logged here but NO "diagnostic_logs event" above
-    //       → frame arrives but binding/filter doesn't match (client-side mismatch)
-    //   • NO frame logged here at all
-    //       → server is not publishing the change (publication/replication issue)
-    const rawOnMessage = (realtimeChannel as any).onMessage?.bind(realtimeChannel);
-    (realtimeChannel as any).onMessage = (event: string, payload: any, ref: any) => {
-      // Skip the noisy heartbeat/phx_reply housekeeping; log substantive frames.
-      if (event !== 'phx_reply' && event !== 'heartbeat') {
-        console.log('[Realtime] RAW frame — event:', event, '| payload:', payload);
-      }
-      return rawOnMessage ? rawOnMessage(event, payload, ref) : payload;
+    const subscribeTable = (table: string, onChange: () => void) => {
+      return supabase
+        .channel(`cottonace-${table}-${mountTag}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
+          console.log(`[Realtime] ${table} event:`, payload.eventType);
+          onChange();
+        })
+        .subscribe((status, err) => {
+          // CHANNEL_ERROR here usually means `table` is not in the
+          // supabase_realtime publication — see CONTRACTS.md §Realtime.
+          console.log(`[Realtime] ${table} status:`, status, err ? `| ${err.message}` : '');
+        });
     };
 
+    const channels = [
+      subscribeTable('diagnostic_logs', synchronizeDashboardData),
+      subscribeTable('farmers_profiles', synchronizeDashboardData),
+      subscribeTable('model_deployments', synchronizeDashboardData),
+      subscribeTable('system_health_telemetry', synchronizeTelemetry),
+    ];
+
     return () => {
-      supabase.removeChannel(realtimeChannel);
+      channels.forEach((ch) => supabase.removeChannel(ch));
     };
   }, []);
 
