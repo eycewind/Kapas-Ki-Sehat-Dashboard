@@ -37,6 +37,7 @@ export default function AdminDashboard() {
 
   // 2. Central Sync Function to Load Active Telemetry
   const synchronizeDashboardData = async () => {
+    console.log('[Sync] synchronizeDashboardData() START @', new Date().toISOString()); // DIAGNOSTIC
     try {
       // Run all reads in parallel; each result carries its own { data/count, error }.
       const [farmersRes, syncsRes, criticalRes, deploymentRes, mapRes] = await Promise.all([
@@ -84,6 +85,12 @@ export default function AdminDashboard() {
         setErrorMsg(null);
       }
 
+      // DIAGNOSTIC: show the counts each sync pulled, so a realtime-triggered
+      // refetch is visible (and we can confirm the value actually changed).
+      console.log('[Sync] fetched — farmers:', farmersRes.count,
+        '| scans24h:', syncsRes.count, '| critical:', criticalRes.count,
+        '| mapRows:', mapRes.data?.length);
+
       // Map whatever data did come back; a failed query leaves its slice at the safe default.
       setMapLogs((mapRes.data as DiagnosticLog[]) || []);
       setFarmersCount(farmersRes.count || 0);
@@ -128,6 +135,19 @@ export default function AdminDashboard() {
     // runs synchronously within a single JS tick, so both calls can return
     // the identical millisecond timestamp. The ref increments on every mount,
     // giving mount-1 → "...-1" and mount-2 → "...-2" with no possible clash.
+    // DIAGNOSTIC (socket level): is the underlying websocket actually up?
+    // These fire for the shared RealtimeClient connection, independent of any
+    // single channel. If we never see "socket OPEN", the transport is the problem.
+    const rt: any = supabase.realtime;
+    console.log('[Realtime] socket isConnected() at mount:', rt?.isConnected?.());
+    try {
+      rt?.onOpen?.(() => console.log('[Realtime] socket OPEN'));
+      rt?.onClose?.(() => console.log('[Realtime] socket CLOSE'));
+      rt?.onError?.((e: any) => console.log('[Realtime] socket ERROR:', e?.message || e));
+    } catch (e) {
+      console.log('[Realtime] socket hook attach failed (non-fatal):', e);
+    }
+
     realtimeMountId.current += 1;
     const channelName = `cottonace-mops-stream-${realtimeMountId.current}`;
     console.log('[Realtime] creating channel:', channelName); // DIAGNOSTIC
@@ -158,6 +178,22 @@ export default function AdminDashboard() {
       .subscribe((status, err) => {
         console.log('[Realtime] channel status:', status, err ? `| error: ${err.message}` : '');
       });
+
+    // DIAGNOSTIC (raw frames): override the channel's onMessage to log EVERY
+    // message routed to this channel, before binding-matching. This is the
+    // decisive probe — when you change a row:
+    //   • a frame logged here but NO "diagnostic_logs event" above
+    //       → frame arrives but binding/filter doesn't match (client-side mismatch)
+    //   • NO frame logged here at all
+    //       → server is not publishing the change (publication/replication issue)
+    const rawOnMessage = (realtimeChannel as any).onMessage?.bind(realtimeChannel);
+    (realtimeChannel as any).onMessage = (event: string, payload: any, ref: any) => {
+      // Skip the noisy heartbeat/phx_reply housekeeping; log substantive frames.
+      if (event !== 'phx_reply' && event !== 'heartbeat') {
+        console.log('[Realtime] RAW frame — event:', event, '| payload:', payload);
+      }
+      return rawOnMessage ? rawOnMessage(event, payload, ref) : payload;
+    };
 
     return () => {
       supabase.removeChannel(realtimeChannel);
