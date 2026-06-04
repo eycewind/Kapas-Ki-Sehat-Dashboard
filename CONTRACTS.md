@@ -118,6 +118,13 @@ MASTER §1; this lists only what the dashboard touches.
 > no-location. A row where only one axis is `0` (e.g. lat=0, lon=71.5) still
 > passes — only the exact double-zero pair is blocked.
 >
+> ⚠️ **Marker clustering:** scans from one device/location share near-identical
+> coordinates (~tens of metres) and overlap into a single pixel at low zoom.
+> `LeafletMap` wraps markers in a `MarkerClusterGroup` (`react-leaflet-cluster`)
+> so co-located scans group into a count badge and spiderfy (fan out) on click —
+> otherwise multiple real markers look like one. Risk-colored individual markers
+> are preserved inside clusters.
+>
 > ⚠️ **Current live-data state (MASTER v4 §4):** backend `/scan` hardcodes
 > `whitefly_count = 12`, so `derive_risk_level` always returns `HIGH` for any
 > pest and `LOW` for healthy. Map markers currently show only orange (HIGH) and
@@ -217,6 +224,13 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 
 > ✅ The previous unpkg Leaflet marker-icon PNG dependency was removed — markers
 > are now self-contained `divIcon`s.
+
+### Key runtime dependencies (map)
+| Package | Version | Note |
+|---|---|---|
+| `leaflet` | `^1.9.4` | base map engine |
+| `react-leaflet` | `^4.2.1` | React bindings (React 18 / `@react-leaflet/core` v2) |
+| `react-leaflet-cluster` | `2.1.0` | **pinned** — v4.x requires React 19; v2.1.0 is the React-18-compatible line. Do not bump to v4 without upgrading React/react-leaflet first. |
 
 ---
 

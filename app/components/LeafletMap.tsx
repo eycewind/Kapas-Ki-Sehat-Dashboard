@@ -1,5 +1,6 @@
 import React from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { DiagnosticLog, riskColor } from '../../utils/types';
@@ -20,6 +21,19 @@ function riskMarker(risk: unknown): L.DivIcon {
   });
   iconCache.set(color, icon);
   return icon;
+}
+
+// CottonAce-themed cluster badge showing the number of co-located scans.
+// Without this, scans from one device/location stack on the same pixel and
+// look like a single marker. Clicking a cluster zooms / spiderfies so each
+// individual scan becomes selectable.
+function clusterIcon(cluster: { getChildCount: () => number }): L.DivIcon {
+  const count = cluster.getChildCount();
+  return L.divIcon({
+    className: 'cottonace-cluster',
+    html: `<div style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:9999px;background:rgba(107,230,117,0.85);color:#0B1110;font-weight:700;font-size:13px;border:2px solid #0B1110;box-shadow:0 0 10px rgba(107,230,117,0.55);">${count}</div>`,
+    iconSize: [36, 36],
+  });
 }
 
 interface Props {
@@ -57,34 +71,41 @@ export default function LeafletMap({ logs }: Props) {
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
-        {validLogs.map((log) => (
-          <Marker
-            key={log.id}
-            position={[Number(log.latitude), Number(log.longitude)]}
-            icon={riskMarker(log.risk_level)}
-          >
-            <Popup>
-              <div className="text-xs font-sans p-1">
-                <h4 className="font-bold text-sm border-b pb-1 mb-1 text-emerald-800">
-                  🌾 {log.district || log.agricultural_belt || 'Unknown District'}
-                </h4>
-                <p>
-                  <strong>Risk:</strong>{' '}
-                  <span style={{ color: riskColor(log.risk_level) }}>
-                    {log.risk_level || 'N/A'}
-                  </span>
-                </p>
-                <p><strong>Whitefly count:</strong> {log.whitefly_count ?? 'N/A'}</p>
-                <p>
-                  <strong>Confidence:</strong>{' '}
-                  {log.confidence_score != null
-                    ? `${Math.round(log.confidence_score * 100)}%`
-                    : 'N/A'}
-                </p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
+        <MarkerClusterGroup
+          iconCreateFunction={clusterIcon}
+          showCoverageOnHover={false}
+          spiderfyOnMaxZoom
+          maxClusterRadius={45}
+        >
+          {validLogs.map((log) => (
+            <Marker
+              key={log.id}
+              position={[Number(log.latitude), Number(log.longitude)]}
+              icon={riskMarker(log.risk_level)}
+            >
+              <Popup>
+                <div className="text-xs font-sans p-1">
+                  <h4 className="font-bold text-sm border-b pb-1 mb-1 text-emerald-800">
+                    🌾 {log.district || log.agricultural_belt || 'Unknown District'}
+                  </h4>
+                  <p>
+                    <strong>Risk:</strong>{' '}
+                    <span style={{ color: riskColor(log.risk_level) }}>
+                      {log.risk_level || 'N/A'}
+                    </span>
+                  </p>
+                  <p><strong>Whitefly count:</strong> {log.whitefly_count ?? 'N/A'}</p>
+                  <p>
+                    <strong>Confidence:</strong>{' '}
+                    {log.confidence_score != null
+                      ? `${Math.round(log.confidence_score * 100)}%`
+                      : 'N/A'}
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MarkerClusterGroup>
       </MapContainer>
     </div>
   );
