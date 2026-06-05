@@ -208,7 +208,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-[#0B1110] text-gray-300 p-4 sm:p-6 font-sans">
-      <div className="max-w-7xl mx-auto space-y-6 sm:space-y-8">
+      <div className="max-w-8xl mx-auto space-y-6 sm:space-y-8">
 
         {/* Header Section */}
         <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end border-b border-[#2A3831] pb-4">
