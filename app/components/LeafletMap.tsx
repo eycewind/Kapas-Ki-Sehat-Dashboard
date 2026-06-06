@@ -36,9 +36,12 @@ export default function LeafletMap({ logs }: Props) {
   // so pins + cluster badges re-read the theme's --risk-* CSS vars, and swaps
   // the CARTO basemap between dark/light so the map matches the surrounding UI.
   const { resolvedTheme } = useTheme();
+  // LIGHT: CARTO Voyager — visible roads + labels (Positron/light_all was too
+  // washed out). DARK: Dark Matter. TileLayer is keyed on theme below so it
+  // swaps cleanly on toggle instead of leaving a dark map under a light UI.
   const tileUrl =
     resolvedTheme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png'
+      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
       : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
 
   // GPS is null (not 0.0) when unavailable per MASTER-CONTRACTS.md §1.1.
@@ -56,17 +59,23 @@ export default function LeafletMap({ logs }: Props) {
   });
 
   return (
-    <div className="w-full rounded-xl overflow-hidden border border-border h-[400px] lg:h-[560px]">
+    <div className="w-full rounded-xl overflow-hidden border border-map-border shadow-card h-[400px] lg:h-[560px]">
       <MapContainer
-        center={[30.1575, 71.5249]}
-        zoom={7}
+        center={[30.1575, 71.5249]} // Multan — open on the southern Punjab cotton belt
+        zoom={8}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
       >
         <TileLayer
+          key={resolvedTheme}
           attribution='&copy; <a href="https://carto.com/">CARTO</a>'
           url={tileUrl}
         />
+        {/* TODO(boundaries): overlay Pakistan province/district GeoJSON as an
+            L.geoJSON layer styled from CSS — stroke var(--map-boundary) weight 1.5,
+            fill transparent; cotton-belt districts (Multan/Bahawalpur/…) use
+            var(--map-boundary-active), slightly heavier. No boundaries file exists
+            in the repo yet — awaiting one from product (do not fabricate). */}
         <MarkerClusterGroup
           key={resolvedTheme}
           iconCreateFunction={makeClusterIcon}

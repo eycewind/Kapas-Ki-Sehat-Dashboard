@@ -36,6 +36,8 @@ module.exports = {
           faint: 'var(--text-faint)',
         },
         border: 'var(--border)',
+        'border-strong': 'var(--border-strong)',
+        'map-border': 'var(--map-border)',
         info: 'var(--info)',
         gold: {
           fill: 'var(--accent-gold-fill)',
@@ -50,6 +52,9 @@ module.exports = {
           'critical-container': 'var(--risk-critical-container)',
           'on-critical': 'var(--risk-on-critical)',
         },
+      },
+      boxShadow: {
+        card: 'var(--shadow-card)',
       },
     },
   },

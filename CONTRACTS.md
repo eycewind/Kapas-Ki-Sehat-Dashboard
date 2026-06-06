@@ -270,8 +270,37 @@ in the same commit. The same values live in `theme.css` as `--risk-*-marker`.
 - Cluster badges: colored by `highestRisk(childLevels)`, NOT a flat green, so a
   cluster containing a CRITICAL is shown red. Child risk is passed to the cluster
   via each marker's `options.risk` (set in the Marker `add` handler).
-- Basemap tiles swap dark/light (CARTO `dark_all`/`light_all`) with the theme.
+- Basemap tiles swap with the theme — **LIGHT: CARTO Voyager** (visible roads +
+  labels), **DARK: `dark_all`** (Dark Matter). `TileLayer key={resolvedTheme}`
+  forces the swap on toggle. (Positron/`light_all` was dropped — too washed out.)
+- Map container is framed with `border-map-border` + `shadow-card`.
+- Default view opens on **Multan (southern Punjab cotton belt)**, zoom 8.
 - The whole cluster layer remounts on theme toggle (`key={resolvedTheme}`).
+- **Map tokens** (`theme.css`): `--map-border` (frame), `--map-boundary` /
+  `--map-boundary-active` (admin-boundary strokes — consumed once the GeoJSON
+  overlay lands, see below).
+
+> 🚧 **TODO — admin boundaries:** the faint CARTO admin lines are low-contrast,
+> so province/district outlines should be overlaid as an `L.geoJSON` layer styled
+> from `--map-boundary` (weight 1.5, fill none; cotton-belt districts heavier via
+> `--map-boundary-active`). **No boundaries GeoJSON exists in the repo yet** — a
+> TODO marker sits in `LeafletMap.tsx` at the `TileLayer`; awaiting a file from
+> product (not fabricated).
+
+### Panel / card separation (light-theme floaty-card fix)
+- KPI cards: `bg-surface border border-border shadow-card` (Critical card swaps bg
+  to `risk-critical-container`).
+- Section panels (map, MLOps, telemetry) use `border-strong` (+ `shadow-card`) so
+  they read as distinct regions against `--bg`.
+- `theme.css` v2 also darkened light `--bg` (`#EEF3ED`) and `--border` so white
+  `--surface` cards separate.
+
+### Seeded coordinates (NOT in this repo)
+The only hardcoded coordinate here is the map **center** (`LeafletMap.tsx`, Multan).
+Marker positions come entirely from `diagnostic_logs.latitude/longitude` in
+Supabase. Test rows currently sit in the **north** (~`33.52, 73.10`, Rawalpindi —
+the dev's real GPS) rather than the cotton belt; that's an app/DB data issue
+(MASTER §10 A2), not something the dashboard sets or can fix.
 
 > ⚠️ **Known contrast caveat (accepted):** Leaflet popups have a fixed white
 > background in both themes. Popup risk text uses the live theme var, so in DARK

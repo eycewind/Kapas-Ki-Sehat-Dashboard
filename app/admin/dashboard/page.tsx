@@ -23,7 +23,7 @@ const LiveMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center h-[400px] lg:h-[560px] text-sm text-fg-faint font-mono animate-pulse bg-surface rounded-xl border border-border">
+      <div className="flex items-center justify-center h-[400px] lg:h-[560px] text-sm text-fg-faint font-mono animate-pulse bg-surface rounded-xl border border-map-border shadow-card">
         🛰️ Synchronizing Geographic Mesh Array...
       </div>
     )
@@ -250,7 +250,7 @@ export default function AdminDashboard() {
             return (
               <div
                 key={idx}
-                className={`border rounded-xl p-5 transition-colors duration-200 ${
+                className={`border rounded-xl p-5 shadow-card transition-colors duration-200 ${
                   idx === 2
                     ? 'bg-risk-critical-container border-risk-critical' // Critical Outbreak Warnings KPI accent
                     : 'bg-surface border-border hover:border-fg-faint'
@@ -283,7 +283,7 @@ export default function AdminDashboard() {
             <LiveMap logs={mapLogs} />
 
             {/* System Health Telemetry Console — live from system_health_telemetry */}
-            <div className="bg-bg border border-border rounded-xl p-4 shadow-inner relative overflow-hidden">
+            <div className="bg-bg border border-border-strong rounded-xl p-4 shadow-inner relative overflow-hidden">
               <div className="flex items-center space-x-2 mb-3 border-b border-border pb-2">
                 <Terminal className="w-4 h-4 text-fg-faint" />
                 <span className="text-xs font-semibold text-fg-secondary uppercase tracking-widest">System Health Telemetry</span>
@@ -317,7 +317,7 @@ export default function AdminDashboard() {
 
           {/* Right Column Panel: MLOps Active Pipeline */}
           <div className="space-y-6">
-            <div className="bg-surface border border-border rounded-xl p-6 h-full flex flex-col">
+            <div className="bg-surface border border-border-strong shadow-card rounded-xl p-6 h-full flex flex-col">
               <div className="flex items-center space-x-2 mb-6">
                 <Server className="w-5 h-5 text-gold-text" />
                 <h2 className="text-lg font-semibold text-gold-text">MLOps Active Pipeline Control</h2>
