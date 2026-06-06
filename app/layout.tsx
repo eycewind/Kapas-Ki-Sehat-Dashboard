@@ -1,4 +1,6 @@
 import './globals.css';
+import './theme.css';
+import { Providers } from './providers';
 
 export const metadata = {
   title: 'CottonAce Admin Console',
@@ -11,8 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className="antialiased">{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body className="antialiased">
+        <Providers>{children}</Providers>
+      </body>
     </html>
   );
 }

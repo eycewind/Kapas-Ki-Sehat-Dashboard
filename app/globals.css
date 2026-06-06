@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Paint the page surface from theme tokens so html/body (and overscroll
+   margins) follow the active theme instead of flashing the UA default white. */
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+}

@@ -231,6 +231,52 @@ Defined for the dashboard in `utils/types.ts` as `RiskLevel` + `RISK_COLORS`.
 | `leaflet` | `^1.9.4` | base map engine |
 | `react-leaflet` | `^4.2.1` | React bindings (React 18 / `@react-leaflet/core` v2) |
 | `react-leaflet-cluster` | `2.1.0` | **pinned** — v4.x requires React 19; v2.1.0 is the React-18-compatible line. Do not bump to v4 without upgrading React/react-leaflet first. |
+| `next-themes` | latest (React 18 compatible) | dark/light theme switching |
+
+---
+
+## 6b. Theming (dark default + light)
+
+Dark is the **default** (ops/monitoring surface). Light is opt-in via the header
+toggle.
+
+- **Token source:** [`app/theme.css`](app/theme.css) — CSS custom properties under
+  `:root,[data-theme="dark"]` and `[data-theme="light"]`. Imported globally in
+  `app/layout.tsx`.
+- **Consumption:** Tailwind `theme.extend.colors` in `tailwind.config.js` maps
+  semantic tokens → the CSS vars, so classes follow the theme automatically:
+  `bg-bg`, `bg-surface[-variant|-3]`, `text-fg[-secondary|-faint]`,
+  `border-border`, `text/bg-primary-bright`, `text-info`, `bg-gold-fill` +
+  `text-gold-on` + `text-gold-text`, `bg-risk-critical-container` +
+  `text-risk-on-critical`, `text/bg-risk-{low|medium|high|critical}`.
+  > ⚠️ var()-based tokens do NOT support Tailwind opacity modifiers (`bg-x/40`).
+- **Switching:** `next-themes` `ThemeProvider` (`app/providers.tsx`),
+  `attribute="data-theme"`, `defaultTheme="dark"`, `enableSystem`. `<html>` has
+  `suppressHydrationWarning`; the toggle (`app/components/ThemeToggle.tsx`) guards
+  on `mounted` to avoid a hydration flash.
+- **Status indicator (no dedicated token):** error → `risk-critical`, syncing →
+  `info`, live → `primary-bright`.
+- **Telemetry log levels:** colored via vars in `page.tsx` (`INFO`→primary-bright,
+  `WARN`→accent-gold-text, `ERROR`→risk-critical-marker) so they stay legible in
+  light mode.
+
+### Risk colors — cross-system contract
+[`utils/risk-colors.ts`](utils/risk-colors.ts) `RISK_MARKERS` hexes **must equal
+the Android app's `RiskColors *Marker`** (app `Color.kt`). A HIGH pin must look
+identical in both surfaces. **Do not edit these hexes** without changing the app
+in the same commit. The same values live in `theme.css` as `--risk-*-marker`.
+
+- Map pins: `riskDivIcon(level)` (reads the live `--risk-*-marker` var → re-themes).
+- Cluster badges: colored by `highestRisk(childLevels)`, NOT a flat green, so a
+  cluster containing a CRITICAL is shown red. Child risk is passed to the cluster
+  via each marker's `options.risk` (set in the Marker `add` handler).
+- Basemap tiles swap dark/light (CARTO `dark_all`/`light_all`) with the theme.
+- The whole cluster layer remounts on theme toggle (`key={resolvedTheme}`).
+
+> ⚠️ **Known contrast caveat (accepted):** Leaflet popups have a fixed white
+> background in both themes. Popup risk text uses the live theme var, so in DARK
+> mode the bright `--risk-*-marker` colors are low-contrast on the white popup.
+> (Chosen over the light-set hexes to keep the contract var consumption uniform.)
 
 ---
 

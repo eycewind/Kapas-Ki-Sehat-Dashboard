@@ -1,0 +1,90 @@
+/* CottonAce Command Center — theme tokens (v2: stronger separation + map tokens)
+ *
+ * Mirrors the Android app's Color.kt so the two surfaces stay in visual sync.
+ * Toggle by setting data-theme="dark" | "light" on <html> (e.g. via next-themes).
+ * Dark is the default for this ops dashboard.
+ *
+ * CONTRACT: the --risk-*-marker values MUST equal the Android app's
+ * RiskColors *Marker hexes. A HIGH pin must look identical in both places.
+ */
+
+:root,
+[data-theme="dark"] {
+  /* chrome */
+  --bg: #0B1110;
+  --surface: #151D1A;
+  --surface-variant: #1E2A24;
+  --surface-3: #26322C;
+  --primary: #2E7D32;
+  --primary-bright: #43A047;
+  --on-primary: #F4F7F5;
+  --text: #F4F7F5;
+  --text-secondary: #A8B3AD;
+  --text-faint: #6F7B75;
+  --border: #2A3831;
+  --border-strong: #3C4D44;     /* card/panel outlines that must read clearly */
+  --shadow-card: 0 1px 3px rgba(0,0,0,.45);
+  --info: #4DA3FF;
+
+  /* gold accent */
+  --accent-gold-fill: #F4B740;
+  --on-accent-gold: #231A00;
+  --accent-gold-text: #F4B740;
+
+  /* map */
+  --map-border: #3C4D44;        /* frame around the map panel */
+  --map-boundary: #8AB894;      /* GeoJSON admin-boundary stroke, bright on dark tiles */
+  --map-boundary-active: #43A047;
+
+  /* risk markers — CONTRACT, match app dark set */
+  --risk-low-marker: #6BE675;
+  --risk-medium-marker: #FFCC66;
+  --risk-high-marker: #FF9E4D;
+  --risk-critical-marker: #EF5350;
+
+  /* risk containers */
+  --risk-low-container: #16331C;      --risk-on-low: #A5F2B3;
+  --risk-medium-container: #3D3416;   --risk-on-medium: #FFE0A3;
+  --risk-high-container: #4A2E10;     --risk-on-high: #FFD2A6;
+  --risk-critical-container: #4A1C1C; --risk-on-critical: #FFB4AB;
+}
+
+[data-theme="light"] {
+  /* chrome — bg pulled slightly cooler/darker so white cards separate */
+  --bg: #EEF3ED;
+  --surface: #FFFFFF;
+  --surface-variant: #E4EDE4;
+  --surface-3: #D8E4D9;
+  --primary: #2E7D32;
+  --primary-bright: #2E7D32;
+  --on-primary: #FFFFFF;
+  --text: #11201A;
+  --text-secondary: #41594F;
+  --text-faint: #6F7B75;
+  --border: #C2D2C6;            /* was #D3E0D6 — too faint; cards looked floaty */
+  --border-strong: #9DB3A2;     /* clear panel/map outlines */
+  --shadow-card: 0 1px 3px rgba(20,40,30,.10), 0 1px 2px rgba(20,40,30,.06);
+  --info: #00658F;
+
+  /* gold */
+  --accent-gold-fill: #F4B740;
+  --on-accent-gold: #231A00;
+  --accent-gold-text: #8A6300;
+
+  /* map */
+  --map-border: #9DB3A2;
+  --map-boundary: #4A5D50;      /* dark-ish stroke, clearly visible on light tiles */
+  --map-boundary-active: #2E7D32;
+
+  /* risk markers — CONTRACT, match app light set */
+  --risk-low-marker: #2E7D32;
+  --risk-medium-marker: #E89200;
+  --risk-high-marker: #EF6C00;
+  --risk-critical-marker: #C62828;
+
+  /* risk containers */
+  --risk-low-container: #C8E6C9;      --risk-on-low: #1B5E20;
+  --risk-medium-container: #FFF1C2;   --risk-on-medium: #5F4400;
+  --risk-high-container: #FFE0B2;     --risk-on-high: #C44900;
+  --risk-critical-container: #FFCDD2; --risk-on-critical: #8E1515;
+}

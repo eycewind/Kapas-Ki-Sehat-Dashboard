@@ -4,8 +4,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Users, Activity, AlertTriangle, Crosshair, Server, Database, Play, Terminal } from 'lucide-react';
 import { supabase } from '../../../utils/supabase';
 import type { DiagnosticLog, ModelDeployment, SystemHealthLog } from '../../../utils/types';
-import { logLevelColor, formatLogTime } from '../../../utils/types';
+import { formatLogTime } from '../../../utils/types';
+import ThemeToggle from '../../components/ThemeToggle';
 import dynamic from 'next/dynamic';
+
+// Telemetry log-level colors as theme tokens (so they stay legible in light
+// mode, where the dark-oriented bright hexes from utils/types would wash out).
+const LEVEL_VAR: Record<string, string> = {
+  INFO: 'var(--primary-bright)',
+  WARN: 'var(--accent-gold-text)',
+  ERROR: 'var(--risk-critical-marker)',
+};
+const levelColor = (level: string): string => LEVEL_VAR[level] ?? 'var(--text-faint)';
 
 // Clean standard lazy-loading syntax targeting default export
 const LiveMap = dynamic(
@@ -13,7 +23,7 @@ const LiveMap = dynamic(
   {
     ssr: false,
     loading: () => (
-      <div className="flex items-center justify-center h-[400px] lg:h-[560px] text-sm text-gray-500 font-mono animate-pulse bg-[#151D1A] rounded-xl border border-[#2A3831]">
+      <div className="flex items-center justify-center h-[400px] lg:h-[560px] text-sm text-fg-faint font-mono animate-pulse bg-surface rounded-xl border border-border">
         🛰️ Synchronizing Geographic Mesh Array...
       </div>
     )
@@ -176,10 +186,10 @@ export default function AdminDashboard() {
 
   // Map Macro Metrics Arrays for UI Iteration
   const macroMetrics = [
-    { label: 'Active Farmers', value: farmersCount.toLocaleString(), icon: Users, color: 'text-blue-400', sublabel: '' },
-    { label: 'Inference Scans', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-[#6BE675]', sublabel: 'last 24 hours' },
-    { label: 'Critical Outbreak Warnings', value: criticalCount, icon: AlertTriangle, color: 'text-red-400', sublabel: '' },
-    { label: 'Mean Engine Confidence', value: meanConfidenceDisplay, icon: Crosshair, color: 'text-[#F4B740]', sublabel: scoredLogs.length > 0 ? `last ${scoredLogs.length} scans` : '' },
+    { label: 'Active Farmers', value: farmersCount.toLocaleString(), icon: Users, color: 'text-info', sublabel: '' },
+    { label: 'Inference Scans', value: syncsCount.toLocaleString(), icon: Activity, color: 'text-primary-bright', sublabel: 'last 24 hours' },
+    { label: 'Critical Outbreak Warnings', value: criticalCount, icon: AlertTriangle, color: 'text-risk-critical', sublabel: '' },
+    { label: 'Mean Engine Confidence', value: meanConfidenceDisplay, icon: Crosshair, color: 'text-gold-text', sublabel: scoredLogs.length > 0 ? `last ${scoredLogs.length} scans` : '' },
   ];
 
   // Map Model Metrics — flat columns per MASTER-CONTRACTS.md §1.3.
@@ -189,17 +199,17 @@ export default function AdminDashboard() {
   const precisionScore = deployment?.precision_score ?? '0.89';
   const recallScore = deployment?.recall_score ?? '0.87';
 
-  // Connection status indicator: error (red) > syncing (yellow) > live (green).
+  // Connection status indicator: error (critical) > syncing (info) > live (primary).
   const statusDot = errorMsg
-    ? 'bg-red-500 animate-pulse'
+    ? 'bg-risk-critical animate-pulse'
     : isLoading
-    ? 'bg-yellow-400 animate-bounce'
-    : 'bg-[#6BE675] animate-pulse';
+    ? 'bg-info animate-bounce'
+    : 'bg-primary-bright animate-pulse';
   const statusTextColor = errorMsg
-    ? 'text-red-400'
+    ? 'text-risk-critical'
     : isLoading
-    ? 'text-yellow-400'
-    : 'text-[#6BE675]';
+    ? 'text-info'
+    : 'text-primary-bright';
   const statusLabel = errorMsg
     ? 'Connection Error'
     : isLoading
@@ -207,24 +217,27 @@ export default function AdminDashboard() {
     : 'System Live (Realtime Mode)';
 
   return (
-    <div className="min-h-screen bg-[#0B1110] text-gray-300 p-4 sm:p-6 font-sans">
+    <div className="min-h-screen bg-bg text-fg-secondary p-4 sm:p-6 font-sans">
       <div className="max-w-8xl mx-auto space-y-6 sm:space-y-8">
 
         {/* Header Section */}
-        <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end border-b border-[#2A3831] pb-4">
+        <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-end border-b border-border pb-4">
           <div>
-            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">CottonAce Command Center</h1>
-            <p className="text-sm text-gray-400 mt-1">Admin & MLOps Dashboard Workspace</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-fg tracking-tight">CottonAce Command Center</h1>
+            <p className="text-sm text-fg-secondary mt-1">Admin & MLOps Dashboard Workspace</p>
           </div>
-          <div className="flex items-center space-x-2 text-sm bg-[#151D1A] px-4 py-2 rounded-md border border-[#2A3831] self-start sm:self-auto shrink-0">
-            <span className={`w-2 h-2 rounded-full ${statusDot}`}></span>
-            <span className={`${statusTextColor} font-medium`}>{statusLabel}</span>
+          <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            <div className="flex items-center space-x-2 text-sm bg-surface px-4 py-2 rounded-md border border-border">
+              <span className={`w-2 h-2 rounded-full ${statusDot}`}></span>
+              <span className={`${statusTextColor} font-medium`}>{statusLabel}</span>
+            </div>
+            <ThemeToggle />
           </div>
         </header>
 
         {/* Error Banner — surfaces sync failures instead of silently showing zeros */}
         {errorMsg && (
-          <div className="flex items-start space-x-2 text-sm bg-red-950/40 border border-red-800 text-red-300 rounded-md px-4 py-3">
+          <div className="flex items-start space-x-2 text-sm bg-risk-critical-container border border-risk-critical text-risk-on-critical rounded-md px-4 py-3">
             <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
             <span>Failed to sync dashboard data: {errorMsg}</span>
           </div>
@@ -235,16 +248,23 @@ export default function AdminDashboard() {
           {macroMetrics.map((metric, idx) => {
             const Icon = metric.icon;
             return (
-              <div key={idx} className="bg-[#151D1A] border border-[#2A3831] rounded-xl p-5 hover:border-gray-500 transition-colors duration-200">
+              <div
+                key={idx}
+                className={`border rounded-xl p-5 transition-colors duration-200 ${
+                  idx === 2
+                    ? 'bg-risk-critical-container border-risk-critical' // Critical Outbreak Warnings KPI accent
+                    : 'bg-surface border-border hover:border-fg-faint'
+                }`}
+              >
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{metric.label}</p>
-                    <h3 className={`text-2xl font-bold mt-2 ${idx === 3 ? 'text-[#F4B740]' : 'text-white'}`}>{metric.value}</h3>
+                    <p className="text-xs font-medium text-fg-faint uppercase tracking-wider">{metric.label}</p>
+                    <h3 className={`text-2xl font-bold mt-2 ${idx === 3 ? 'text-gold-text' : idx === 2 ? 'text-risk-on-critical' : 'text-fg'}`}>{metric.value}</h3>
                     {metric.sublabel ? (
-                      <p className="text-[10px] text-gray-600 mt-1">{metric.sublabel}</p>
+                      <p className="text-[10px] text-fg-faint mt-1">{metric.sublabel}</p>
                     ) : null}
                   </div>
-                  <div className={`p-2 bg-[#0B1110] rounded-lg border border-[#2A3831]`}>
+                  <div className={`p-2 bg-bg rounded-lg border border-border`}>
                     <Icon className={`w-5 h-5 ${metric.color}`} />
                   </div>
                 </div>
@@ -263,32 +283,32 @@ export default function AdminDashboard() {
             <LiveMap logs={mapLogs} />
 
             {/* System Health Telemetry Console — live from system_health_telemetry */}
-            <div className="bg-[#0B1110] border border-[#2A3831] rounded-xl p-4 shadow-inner relative overflow-hidden">
-              <div className="flex items-center space-x-2 mb-3 border-b border-[#2A3831] pb-2">
-                <Terminal className="w-4 h-4 text-gray-500" />
-                <span className="text-xs font-semibold text-gray-400 uppercase tracking-widest">System Health Telemetry</span>
+            <div className="bg-bg border border-border rounded-xl p-4 shadow-inner relative overflow-hidden">
+              <div className="flex items-center space-x-2 mb-3 border-b border-border pb-2">
+                <Terminal className="w-4 h-4 text-fg-faint" />
+                <span className="text-xs font-semibold text-fg-secondary uppercase tracking-widest">System Health Telemetry</span>
               </div>
               <div className="font-mono text-sm space-y-1.5">
                 {telemetryLogs.length === 0 ? (
-                  <p className="text-gray-600 text-xs">No telemetry entries yet.</p>
+                  <p className="text-fg-faint text-xs">No telemetry entries yet.</p>
                 ) : (
                   // Reverse so the most-recent entry sits at the bottom (terminal convention).
                   [...telemetryLogs].reverse().map((log) => (
                     <div key={log.id} className="opacity-90 hover:opacity-100 transition-opacity flex items-start space-x-2">
-                      <span className="text-gray-600 flex-shrink-0">{'>'}</span>
-                      <span style={{ color: logLevelColor(log.log_level) }}>
+                      <span className="text-fg-faint flex-shrink-0">{'>'}</span>
+                      <span style={{ color: levelColor(log.log_level) }}>
                         [{log.log_level}]
                       </span>
-                      <span className="text-gray-500 flex-shrink-0">{formatLogTime(log.created_at)}</span>
-                      <span className="text-gray-400">
-                        <span className="text-gray-300">{log.component}</span>: {log.message}
+                      <span className="text-fg-faint flex-shrink-0">{formatLogTime(log.created_at)}</span>
+                      <span className="text-fg-secondary">
+                        <span className="text-fg">{log.component}</span>: {log.message}
                       </span>
                     </div>
                   ))
                 )}
                 <div className="animate-pulse flex items-center space-x-2 mt-1">
-                  <span className="text-gray-600">{'>'}</span>
-                  <span className="w-2 h-4 bg-[#6BE675] inline-block"></span>
+                  <span className="text-fg-faint">{'>'}</span>
+                  <span className="w-2 h-4 bg-primary-bright inline-block"></span>
                 </div>
               </div>
             </div>
@@ -297,45 +317,45 @@ export default function AdminDashboard() {
 
           {/* Right Column Panel: MLOps Active Pipeline */}
           <div className="space-y-6">
-            <div className="bg-[#151D1A] border border-[#2A3831] rounded-xl p-6 h-full flex flex-col">
+            <div className="bg-surface border border-border rounded-xl p-6 h-full flex flex-col">
               <div className="flex items-center space-x-2 mb-6">
-                <Server className="w-5 h-5 text-[#F4B740]" />
-                <h2 className="text-lg font-semibold text-[#F4B740]">MLOps Active Pipeline Control</h2>
+                <Server className="w-5 h-5 text-gold-text" />
+                <h2 className="text-lg font-semibold text-gold-text">MLOps Active Pipeline Control</h2>
               </div>
               
               <div className="space-y-6 flex-1">
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Deployed Architecture</p>
-                  <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg font-mono text-sm text-[#6BE675] flex items-center justify-between">
+                  <p className="text-xs text-fg-faint uppercase tracking-wider mb-2">Deployed Architecture</p>
+                  <div className="bg-bg border border-border p-3 rounded-lg font-mono text-sm text-primary-bright flex items-center justify-between">
                     <span>{modelVersion}</span>
                     <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-[#6BE675] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#6BE675]"></span>
+                      <span className="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-primary-bright opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-bright"></span>
                     </span>
                   </div>
                 </div>
 
                 <div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wider mb-2">Baseline Evaluation Scores</p>
+                  <p className="text-xs text-fg-faint uppercase tracking-wider mb-2">Baseline Evaluation Scores</p>
                   <div className="grid grid-cols-3 gap-3">
-                    <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{f1Score}</div>
-                      <div className="text-[10px] text-gray-500 mt-1 uppercase">F1 Score</div>
+                    <div className="bg-bg border border-border p-3 rounded-lg text-center">
+                      <div className="text-xl font-bold text-fg">{f1Score}</div>
+                      <div className="text-[10px] text-fg-faint mt-1 uppercase">F1 Score</div>
                     </div>
-                    <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{precisionScore}</div>
-                      <div className="text-[10px] text-gray-500 mt-1 uppercase">Precision</div>
+                    <div className="bg-bg border border-border p-3 rounded-lg text-center">
+                      <div className="text-xl font-bold text-fg">{precisionScore}</div>
+                      <div className="text-[10px] text-fg-faint mt-1 uppercase">Precision</div>
                     </div>
-                    <div className="bg-[#0B1110] border border-[#2A3831] p-3 rounded-lg text-center">
-                      <div className="text-xl font-bold text-white">{recallScore}</div>
-                      <div className="text-[10px] text-gray-500 mt-1 uppercase">Recall</div>
+                    <div className="bg-bg border border-border p-3 rounded-lg text-center">
+                      <div className="text-xl font-bold text-fg">{recallScore}</div>
+                      <div className="text-[10px] text-fg-faint mt-1 uppercase">Recall</div>
                     </div>
                   </div>
                 </div>
               </div>
 
               <div className="mt-8">
-                <button className="w-full relative group overflow-hidden rounded-lg bg-[#F4B740] text-[#0B1110] font-bold text-sm py-4 px-4 transition-all hover:bg-yellow-500 shadow-[0_0_15px_rgba(244,183,64,0.3)] hover:shadow-[0_0_25px_rgba(244,183,64,0.5)]">
+                <button className="w-full relative group overflow-hidden rounded-lg bg-gold-fill text-gold-on font-bold text-sm py-4 px-4 transition-all hover:brightness-110 shadow-[0_0_15px_rgba(244,183,64,0.3)] hover:shadow-[0_0_25px_rgba(244,183,64,0.5)]">
                   <span className="relative z-10 flex items-center justify-center space-x-2">
                     <Play className="w-4 h-4" />
                     <span>Trigger Continuous Training Cycle</span>

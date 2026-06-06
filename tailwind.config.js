@@ -14,6 +14,43 @@ module.exports = {
       maxWidth: {
         '8xl': '120rem', // 1920px
       },
+      // Semantic color tokens → CSS custom properties in app/theme.css.
+      // These follow data-theme="dark|light" automatically. NOTE: var()-based
+      // colors do NOT support Tailwind opacity modifiers (e.g. bg-surface/40) —
+      // use a solid token instead.
+      colors: {
+        bg: 'var(--bg)',
+        surface: {
+          DEFAULT: 'var(--surface)',
+          variant: 'var(--surface-variant)',
+          3: 'var(--surface-3)',
+        },
+        primary: {
+          DEFAULT: 'var(--primary)',
+          bright: 'var(--primary-bright)',
+        },
+        'on-primary': 'var(--on-primary)',
+        fg: {
+          DEFAULT: 'var(--text)',
+          secondary: 'var(--text-secondary)',
+          faint: 'var(--text-faint)',
+        },
+        border: 'var(--border)',
+        info: 'var(--info)',
+        gold: {
+          fill: 'var(--accent-gold-fill)',
+          on: 'var(--on-accent-gold)',
+          text: 'var(--accent-gold-text)',
+        },
+        risk: {
+          low: 'var(--risk-low-marker)',
+          medium: 'var(--risk-medium-marker)',
+          high: 'var(--risk-high-marker)',
+          critical: 'var(--risk-critical-marker)',
+          'critical-container': 'var(--risk-critical-container)',
+          'on-critical': 'var(--risk-on-critical)',
+        },
+      },
     },
   },
   plugins: [],
