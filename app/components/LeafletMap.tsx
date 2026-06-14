@@ -35,8 +35,13 @@ export default function LeafletMap({ logs }: Props) {
   // resolvedTheme drives a full remount of the cluster layer (via key) on toggle
   // so pins + cluster badges re-read the theme's --risk-* CSS vars.
   const { resolvedTheme } = useTheme();
-  // CARTO Voyager — colorful base map that suits the light dashboard theme.
-  const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+  // Match the basemap to the dashboard theme: Voyager (colorful) in light,
+  // Dark Matter in dark. The TileLayer is keyed on resolvedTheme below so
+  // Leaflet swaps tiles when the theme toggles.
+  const tileUrl =
+    resolvedTheme === 'dark'
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   // GPS is null (not 0.0) when unavailable per MASTER-CONTRACTS.md §1.1.
   // Require both coords present, finite, and not the exact (0,0) legacy sentinel.
