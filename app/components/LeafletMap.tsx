@@ -33,16 +33,10 @@ interface Props {
 
 export default function LeafletMap({ logs }: Props) {
   // resolvedTheme drives a full remount of the cluster layer (via key) on toggle
-  // so pins + cluster badges re-read the theme's --risk-* CSS vars, and swaps
-  // the CARTO basemap between dark/light so the map matches the surrounding UI.
+  // so pins + cluster badges re-read the theme's --risk-* CSS vars.
   const { resolvedTheme } = useTheme();
-  // LIGHT: CARTO Voyager — visible roads + labels (Positron/light_all was too
-  // washed out). DARK: Dark Matter. TileLayer is keyed on theme below so it
-  // swaps cleanly on toggle instead of leaving a dark map under a light UI.
-  const tileUrl =
-    resolvedTheme === 'light'
-      ? 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png'
-      : 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+  // CARTO Voyager — colorful base map that suits the light dashboard theme.
+  const tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
 
   // GPS is null (not 0.0) when unavailable per MASTER-CONTRACTS.md §1.1.
   // Require both coords present, finite, and not the exact (0,0) legacy sentinel.
@@ -68,7 +62,7 @@ export default function LeafletMap({ logs }: Props) {
       >
         <TileLayer
           key={resolvedTheme}
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url={tileUrl}
         />
         {/* TODO(boundaries): overlay Pakistan province/district GeoJSON as an
