@@ -5,6 +5,10 @@ import { Providers } from './providers';
 export const metadata = {
   title: 'CottonAce Admin Console',
   description: 'Operational Dashboard',
+  // Unauthenticated demo dashboard — keep it out of search results.
+  // Renders <meta name="robots" content="noindex, nofollow"> (paired with
+  // public/robots.txt which disallows all crawlers).
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
